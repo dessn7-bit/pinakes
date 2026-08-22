@@ -13,7 +13,8 @@
 
    Kapılar v82'dekiyle AYNI (yeniden yazılmadı): ayar kapalıysa sessiz,
    özetlide/taslaklıda/reddedilmişte üretim yok, çevrimdışında kuyruk bekler.
-   Seri taramada ek önlem YOK: kuyruk zaten kitap başına ≥3 sn serileştirir.
+   Seri taramada ek önlem YOK: kuyruk kitap başına bekleme ile serileştirir
+   (v84: 3 sn → 1 sn — model kalktı, yalnız kaynak sorgusu).
 
    (Mutasyon: katalog.js taslakAday çağrısını kaldır → (a)/(e) kırmızı;
     kesfet.js çağrısını kaldır → (b) kırmızı.) */
@@ -31,7 +32,8 @@ async function taslakUcKur(page, yanit) {
     s.zamanlar.push(Date.now());
     r.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify(yanit || { durum: 'tamam',
-        metin: 'KONU — deneme taslağı. ' + 'içerik '.repeat(20), kaynak: ['Goodreads'] }) });
+        metin: 'Yayınevi tanıtımı: deneme taslağı. ' + 'içerik '.repeat(20),
+        kaynak: '1000Kitap', dil: 'tr' }) });
   });
   return s;
 }
@@ -160,7 +162,7 @@ test.describe('G83 taslak tetikleyicileri', () => {
     expect(uc.istekler.length, 'model isteği yok — çifte üretim önlendi').toBe(0);
   });
 
-  test('(e) seri taramada 5 kitap: kuyruk tavanı aşılmaz, istekler ≥3 sn arayla serileşir', async ({ page }) => {
+  test('(e) seri taramada 5 kitap: kuyruk tavanı aşılmaz, istekler ≥1 sn arayla serileşir', async ({ page }) => {
     test.setTimeout(90000);
     const uc = await taslakUcKur(page);
     await kameraTaklit(page);
@@ -180,8 +182,8 @@ test.describe('G83 taslak tetikleyicileri', () => {
     const araliklar = uc.zamanlar.slice(1).map((t, i) => t - uc.zamanlar[i]);
     console.log('[G83 aralık] POST aralıkları (ms): ' + araliklar.join(', ')
       + ' — en kısa: ' + Math.min(...araliklar));
-    // sözleşme "en az 3 sn"; zamanlayıcı sapması payı 200 ms
-    for (const a of araliklar) expect(a, 'istekler serileşti').toBeGreaterThanOrEqual(2800);
+    // v84 sözleşmesi "en az 1 sn"; zamanlayıcı sapması payı 100 ms
+    for (const a of araliklar) expect(a, 'istekler serileşti').toBeGreaterThanOrEqual(900);
     expect(await kuyruk(page), 'hepsi işlendi, kuyruk boşaldı').toEqual([]);
   });
 });

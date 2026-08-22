@@ -1226,17 +1226,18 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
         <div class="ay-eylem">
           <button class="btn btn-cerceve" data-act="zg-tara">Taramayı başlat</button>
         </div>
-        <!-- TASLAK ÖZET (ts-, v82) — YENİ .ay-bolum AÇILMADI: g48 sekiz bölüm
-             id'sini ve kicker sayısını kilitliyor; zenginleştirme ailesinin
-             içinde. Onaysız hiçbir metin kütüphaneye yazılmaz. -->
-        <h3 class="ay-baslik">Taslak özet üret</h3>
-        <p class="ay-not">Açıkken, rafa YENİ eklenen kitap için yapay zekâ bir <b>taslak</b> özet hazırlar
-      ve beklemeye alır. Taslak kitabın detayında şerit olarak görünür; <b>sen onaylamadan kütüphanene
-      yazılmaz</b>, senkrona ve yedeğe girmez. Kitap önce kaynaklarda (Goodreads, 1000Kitap) doğrulanır —
-      bulunamayan kitap için üretim yapılmaz. Mevcut özeti olan kitaba dokunulmaz.</p>
+        <!-- TASLAK / KİTAP AÇIKLAMASI (ts-, v82; v84'te model→kaynak) — YENİ
+             .ay-bolum AÇILMADI: g48 sekiz bölüm id'sini ve kicker sayısını
+             kilitliyor. Onaysız hiçbir metin kütüphaneye yazılmaz. -->
+        <h3 class="ay-baslik">Kitap açıklaması</h3>
+        <p class="ay-not">Açıkken, rafa YENİ eklenen kitabın <b>yayınevi tanıtım metni</b> kaynaklardan
+      (1000Kitap, Google Books, Goodreads) getirilir ve taslak olarak beklemeye alınır. Taslak kitabın
+      detayında şerit olarak görünür; <b>sen onaylamadan kütüphanene yazılmaz</b>, senkrona ve yedeğe
+      girmez. Metin üretilmez — kaynağın kendi tanıtımıdır; bulunamayan kitapta hiçbir şey getirilmez.
+      Mevcut özeti olan kitaba dokunulmaz.</p>
         <div class="zg-depo-satir" id="tsDurum">Kapalı.</div>
         <div class="ay-eylem">
-          <button class="btn btn-cerceve" data-act="ts-ayar">Taslak üretimini aç</button>
+          <button class="btn btn-cerceve" data-act="ts-ayar">Kitap açıklamasını otomatik getir</button>
         </div>
       </section>
 
@@ -2018,9 +2019,13 @@ let taslakYukSoz = null;
 window.__taslak = {
   oku(id){ return taslakBellek.get(String(id)) || null; },
   var(id){ return taslakBellek.has(String(id)); },
-  async kaydet(id, metin, kaynak){
+  /* v84: kaynak artık TEK ad (worker string döner; eski dizi de katlanır),
+     dil isteğe bağlı 4. parametre — 'tr' değilse şerit uyarı basar. Eski
+     kayıtlarda dil alanı yok → uyarı basılmaz (model dönemi metinleri TR). */
+  async kaydet(id, metin, kaynak, dil){
     const kayit = { metin: String(metin || ''), g: Date.now(),
-      kaynak: Array.isArray(kaynak) ? kaynak.map(String) : [] };
+      kaynak: Array.isArray(kaynak) ? kaynak.map(String).join(', ') : String(kaynak || ''),
+      dil: String(dil || 'tr') };
     try{ await tsIslem('readwrite', st => st.put(kayit, String(id))); }
     catch(e){ return false; }
     taslakBellek.set(String(id), kayit);
@@ -2075,7 +2080,9 @@ function taslakDepoBaslat(){
 const TASLAK_AYAR_ANAHTAR = 'kk_taslak_ayar_v1';     // '1' = açık; VARSAYILAN KAPALI
 const TASLAK_KUYRUK_ANAHTAR = 'kk_taslak_kuyruk_v1';
 const TASLAK_DEFTER_ANAHTAR = 'kk_taslak_defter_v1'; // id -> { s:'red'|'yok', t }
-const TASLAK_ARA_MS = 3000;
+/* v84: 3000 → 1000 ms — model çağrısı kalktı, uç yalnız kaynak sorgusu
+   yapıyor; mevcut arama hattı zaten bu hızda çalışıyor. */
+const TASLAK_ARA_MS = 1000;
 const TASLAK_KUYRUK_TAVAN = 100;
 function taslakAyarAcik(){ try{ return localStorage.getItem(TASLAK_AYAR_ANAHTAR) === '1'; }catch(e){ return false; } }
 function taslakDefterOku(){ try{ return JSON.parse(localStorage.getItem(TASLAK_DEFTER_ANAHTAR)) || {}; }catch(e){ return {}; } }
@@ -2128,7 +2135,7 @@ async function taslakKuyrukIsle(){
       }catch(e){ break; }   // ağ arızası: kuyruğu koru, sonraki oturum dener
       if(j && j.durum === 'tamam' && typeof j.metin === 'string' && j.metin.trim()){
         // TASLAK deposuna yazılır — __ozet'e ASLA (onay kullanıcının)
-        await window.__taslak.kaydet(id, j.metin.trim(), j.kaynak);
+        await window.__taslak.kaydet(id, j.metin.trim(), j.kaynak, j.dil);
         taslakKuyrukYaz(taslakKuyrukOku().filter(x => x !== id));
         if(durum.detayId === id && typeof detayAc === 'function') detayAc(id);
       }else if(j && j.durum === 'bulunamadi'){
@@ -2148,11 +2155,11 @@ function tsDurumTazele(){
   const acik = taslakAyarAcik();
   const yok = Object.values(taslakDefterOku()).filter(x => x && x.s === 'yok').length;
   const bekleyen = taslakKuyrukOku().length;
-  kutu.textContent = (acik ? 'Açık — yeni eklenen kitap için taslak hazırlanır.' : 'Kapalı.')
+  kutu.textContent = (acik ? 'Açık — yeni eklenen kitabın tanıtım metni kaynaklardan getirilir.' : 'Kapalı.')
     + (bekleyen ? ' ' + bekleyen + ' kitap sırada.' : '')
     + (yok ? ' ' + yok + ' kitapta kaynak bulunamadı.' : '');
   const dugme = document.querySelector('[data-act="ts-ayar"]');
-  if(dugme) dugme.textContent = acik ? 'Taslak üretimini kapat' : 'Taslak üretimini aç';
+  if(dugme) dugme.textContent = acik ? 'Otomatik getirmeyi kapat' : 'Kitap açıklamasını otomatik getir';
 }
 
 /* ---------- yardımcılar ---------- */
@@ -3019,25 +3026,31 @@ function detayAc(id){
     </div>`;
   };
 
-  /* TASLAK ÖZET şeridi (v82) — özet bloğunun ÜSTÜNDE. Yalnız ÖZET BOŞKEN
-     çizilir: özet doluyken "Özet olarak kaydet" sunmak kullanıcının elle
-     yazdığı metni model metniyle ezme davetiyesi olurdu (EN ÖNEMLİ KURAL).
-     Onaylanmayan metin kütüphaneye girmez: Kaydet → __ozet.kaydet + taslak
-     silinir; At → taslak silinir + deftere 'red' (bir daha üretilmez). */
+  /* TASLAK şeridi (v82; metin v84'te modelden KAYNAĞA döndü) — özet bloğunun
+     ÜSTÜNDE. Yalnız ÖZET BOŞKEN çizilir: özet doluyken "Özet olarak kaydet"
+     sunmak kullanıcının elle yazdığı metni ezme davetiyesi olurdu (EN ÖNEMLİ
+     KURAL). Onaylanmayan metin kütüphaneye girmez: Kaydet → __ozet.kaydet +
+     taslak silinir; At → taslak silinir + deftere 'red' (bir daha gelmez).
+     Metin artık ÜRETİLMİYOR, kaynağın tanıtım metni — şerit bunu kaynak
+     adıyla söyler; Türkçe değilse ikinci satır uyarır. */
   const taslakHtml = () => {
     if(!window.__taslak || !window.__taslak.var(k.id)) return '';
     if(window.__ozet.oku(k.id) || k.ozet) return '';
+    const t = window.__taslak.oku(k.id) || { metin: '', kaynak: '', dil: 'tr' };
+    const kaynakAd = Array.isArray(t.kaynak) ? t.kaynak.join(', ') : String(t.kaynak || '');
+    const kaynakSatir = `<div class="mini-not" style="margin-top:6px">Yayınevi tanıtım metni${
+      kaynakAd ? ' · kaynak: ' + esc(kaynakAd) : ''}</div>`;
+    const dilSatir = (t.dil && t.dil !== 'tr')
+      ? '<div class="mini-not" style="margin-top:2px">Metin Türkçe değil.</div>' : '';
     if(durum.taslakAcik !== k.id){
       return `<div class="detay-satir ts-serit" id="dTaslakSerit">
         <button class="ts-ghost" data-act="ts-oku">Taslak özet hazır — oku</button>
-        <div class="mini-not" style="margin-top:6px">Bu metin otomatik üretildi, doğrulanmadı.</div>
+        ${kaynakSatir}${dilSatir}
       </div>`;
     }
-    const t = window.__taslak.oku(k.id) || { metin: '', kaynak: [] };
     return `<div class="detay-satir" id="dTaslakBlok">
       <div class="d-bolum-bas"><span class="kicker">Taslak özet</span></div>
-      <div class="mini-not" style="margin-top:0">Bu metin otomatik üretildi, doğrulanmadı.${
-        (t.kaynak || []).length ? ' Kaynak doğrulaması: ' + esc(t.kaynak.join(', ')) + '.' : ''}</div>
+      ${kaynakSatir}${dilSatir}
       <div class="ts-govde">${esc(t.metin)}</div>
       <div class="ts-eylem">
         <button class="btn btn-cerceve btn-kucuk" data-act="ts-kaydet">Özet olarak kaydet</button>
