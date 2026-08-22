@@ -235,7 +235,8 @@ test.describe('G55 açılış taraması — tür arka planda kendiliğinden', ()
     await page.goto('/');
     await ayarlarAc(page);
     await expect(page.locator('#ayBolumZengin [data-act="zg-tara"]')).toBeVisible();   // "şimdi tara" duruyor
-    await expect(page.locator('#ayBolumZengin .ay-not')).toContainText('kendiliğinden');
+    // v82: bölüme taslak-özet notu eklendi → iddia TARAMA notuna (ilk) kapsanır
+    await expect(page.locator('#ayBolumZengin .ay-not').first()).toContainText('kendiliğinden');
     await expect(page.locator('#zgOtoKart .ay-baslik')).toHaveText('Otomatik tür');
   });
 });

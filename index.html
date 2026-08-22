@@ -660,15 +660,19 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
    yeniden kullanılmaz kuralı). Metin: düz serif, KUTUSUZ, italiksiz (italik =
    alıntı imzası); pre-wrap satır sonlarını korur. */
 .oz-bos,.onto-bos{padding-top:2px}
-.oz-ghost,.onto-ghost{background:none;border:none;color:var(--brass);font-family:var(--sans);
+.oz-ghost,.onto-ghost,.ts-ghost{background:none;border:none;color:var(--brass);font-family:var(--sans);
   font-size:.72rem;font-weight:600;letter-spacing:.06em;padding:0;position:relative}
-.oz-ghost::after,.onto-ghost::after{content:'';position:absolute;inset:-8px}
-.oz-metin,.onto-metin{white-space:pre-wrap;line-height:1.62;font-size:.95rem;overflow-wrap:anywhere}
-.oz-eylem,.onto-eylem{display:flex;gap:16px;align-items:center;margin-top:10px}
-.oz-sessiz,.onto-sessiz{background:none;border:none;font-size:.8rem;color:var(--muted);padding:0;
+.oz-ghost::after,.onto-ghost::after,.ts-ghost::after{content:'';position:absolute;inset:-8px}
+.oz-metin,.onto-metin,.ts-govde{white-space:pre-wrap;line-height:1.62;font-size:.95rem;overflow-wrap:anywhere}
+.oz-eylem,.onto-eylem,.ts-eylem{display:flex;gap:16px;align-items:center;margin-top:10px}
+.ts-eylem{flex-wrap:wrap}   /* üç düğme dar ekranda alta kıvrılır; oz/onto ikilisi etkilenmez */
+.oz-sessiz,.onto-sessiz,.ts-sessiz{background:none;border:none;font-size:.8rem;color:var(--muted);padding:0;
   position:relative;text-decoration:underline;text-underline-offset:3px;
   text-decoration-color:var(--muted2)}
-.oz-sessiz::after,.onto-sessiz::after{content:'';position:absolute;inset:-8px}
+.oz-sessiz::after,.onto-sessiz::after,.ts-sessiz::after{content:'';position:absolute;inset:-8px}
+/* Taslak şeridi (v82): mini-not tonunda sakin bir satır — kart/dolgu yok */
+.ts-serit{padding-top:2px}
+.ts-govde{margin-top:8px}
 .d-katla{margin-top:12px;border:1px solid var(--kontur);border-radius:var(--r-md);
   background:transparent;box-shadow:none}
 .d-katla summary{list-style:none;cursor:pointer;padding:12px 14px;font-size:.85rem;
@@ -1221,6 +1225,18 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
         <div class="zg-depo-satir" id="zgDurum">Hesaplanıyor…</div>
         <div class="ay-eylem">
           <button class="btn btn-cerceve" data-act="zg-tara">Taramayı başlat</button>
+        </div>
+        <!-- TASLAK ÖZET (ts-, v82) — YENİ .ay-bolum AÇILMADI: g48 sekiz bölüm
+             id'sini ve kicker sayısını kilitliyor; zenginleştirme ailesinin
+             içinde. Onaysız hiçbir metin kütüphaneye yazılmaz. -->
+        <h3 class="ay-baslik">Taslak özet üret</h3>
+        <p class="ay-not">Açıkken, rafa YENİ eklenen kitap için yapay zekâ bir <b>taslak</b> özet hazırlar
+      ve beklemeye alır. Taslak kitabın detayında şerit olarak görünür; <b>sen onaylamadan kütüphanene
+      yazılmaz</b>, senkrona ve yedeğe girmez. Kitap önce kaynaklarda (Goodreads, 1000Kitap) doğrulanır —
+      bulunamayan kitap için üretim yapılmaz. Mevcut özeti olan kitaba dokunulmaz.</p>
+        <div class="zg-depo-satir" id="tsDurum">Kapalı.</div>
+        <div class="ay-eylem">
+          <button class="btn btn-cerceve" data-act="ts-ayar">Taslak üretimini aç</button>
         </div>
       </section>
 
@@ -1949,6 +1965,194 @@ function ozKotaDenetle(){
       toast('Cihaz deposu %80 doldu — yedek al, yer açmayı düşün');
     }
   }).catch(() => {});
+}
+
+/* ---------- TASLAK ÖZET deposu (v82) ----------
+   Model üretimi taslaklar için AYRI IndexedDB deposu — bu sefer ayrı depo
+   DOĞRU karar (özetteki "tek depo genişlet" kararının tersi, gerekçesi de
+   tersi): taslak GEÇİCİ ve ONAYLANMAMIŞ veridir; kk_ozet_v1'e girseydi
+   senkron onu cihazlar arası taşır, JSON yedeği onaylanmamış model metniyle
+   şişerdi. Taslak SENKRONLANMAZ, YEDEĞE GİRMEZ (disaAktar dokunmaz),
+   yalnız bu cihazda bekler.
+   EN ÖNEMLİ KURAL: taslak __ozet'e ASLA kendiliğinden yazılmaz — yalnız
+   kullanıcı "Özet olarak kaydet" deyince __ozet.kaydet çağrılır. İhlali
+   veri-kaybı sınıfıdır: kullanıcının elle yazdığı özetin üzerine model
+   metni yazılamaz. */
+const TASLAK_DB_AD = 'kk_taslak_v1';
+const TASLAK_MAGAZA = 'taslaklar';
+let tsDbSoz = null;
+function tsDbAc(){
+  if(tsDbSoz) return tsDbSoz;
+  tsDbSoz = new Promise((cozul, kir) => {
+    if(!window.indexedDB){ kir(new Error('indexedDB yok')); return; }
+    let istek;
+    try{ istek = indexedDB.open(TASLAK_DB_AD, 1); }
+    catch(e){ kir(e); return; }
+    istek.onupgradeneeded = () => { istek.result.createObjectStore(TASLAK_MAGAZA); };
+    istek.onsuccess = () => {
+      const db = istek.result;
+      db.onclose = () => { tsDbSoz = null; };
+      db.onversionchange = () => { try{ db.close(); }catch(e){} tsDbSoz = null; };
+      cozul(db);
+    };
+    istek.onerror = () => kir(istek.error || new Error('açılamadı'));
+  });
+  tsDbSoz.catch(() => { tsDbSoz = null; });
+  return tsDbSoz;
+}
+function tsIslem(mod, gorev, tekrar){
+  return tsDbAc().then(db => new Promise((cozul, kir) => {
+    let sonuc, tx;
+    try{ tx = db.transaction(TASLAK_MAGAZA, mod); sonuc = gorev(tx.objectStore(TASLAK_MAGAZA)); }
+    catch(e){
+      if(!tekrar){ tsDbSoz = null; cozul(tsIslem(mod, gorev, true)); return; }
+      kir(e); return;
+    }
+    tx.oncomplete = () => cozul(sonuc ? sonuc.result : undefined);
+    tx.onerror = () => kir(tx.error || new Error('işlem hatası'));
+    tx.onabort = () => kir(tx.error || new Error('işlem iptal'));
+  }));
+}
+const taslakBellek = new Map();   // id -> { metin, g, kaynak } (şerit senkron okur)
+let taslakYukSoz = null;
+window.__taslak = {
+  oku(id){ return taslakBellek.get(String(id)) || null; },
+  var(id){ return taslakBellek.has(String(id)); },
+  async kaydet(id, metin, kaynak){
+    const kayit = { metin: String(metin || ''), g: Date.now(),
+      kaynak: Array.isArray(kaynak) ? kaynak.map(String) : [] };
+    try{ await tsIslem('readwrite', st => st.put(kayit, String(id))); }
+    catch(e){ return false; }
+    taslakBellek.set(String(id), kayit);
+    return true;
+  },
+  async sil(id){
+    taslakBellek.delete(String(id));
+    try{ await tsIslem('readwrite', st => st.delete(String(id))); }
+    catch(e){ return false; }
+    return true;
+  },
+  hazirBekle(){ return taslakYukSoz || Promise.resolve(); }
+};
+function taslakDepoBaslat(){
+  taslakYukSoz = (async () => {
+    try{
+      const [anahtarlar, kayitlar] = await Promise.all([
+        tsIslem('readonly', st => st.getAllKeys()),
+        tsIslem('readonly', st => st.getAll())
+      ]);
+      (anahtarlar || []).forEach((id, i) => {
+        const v = (kayitlar || [])[i];
+        if(v && typeof v === 'object' && v.metin) taslakBellek.set(String(id), v);
+      });
+    }catch(e){ /* IDB yok: taslak özelliği sessizce devre dışı kalır */ }
+    // açık detay varsa şerit görünür olsun
+    if(taslakBellek.size && durum.detayId && typeof detayAc === 'function') detayAc(durum.detayId);
+  })();
+  // yetim süpürücüsü (kapak.js/özet deseni): kütüphane BOŞKEN süpürmez
+  setTimeout(() => {
+    if(!Array.isArray(veri.kitaplar) || !veri.kitaplar.length) return;
+    const canli = new Set(veri.kitaplar.map(k => String(k.id)));
+    tsIslem('readonly', st => st.getAllKeys()).then(anahtarlar => {
+      (anahtarlar || []).forEach(a => {
+        if(!canli.has(String(a))){
+          taslakBellek.delete(String(a));
+          tsIslem('readwrite', st => st.delete(String(a))).catch(() => {});
+        }
+      });
+    }).catch(() => {});
+  }, 3000);
+}
+
+/* ---------- taslak üretim kuyruğu (v82) ----------
+   Kitap EKLENDİĞİNDE aday olur; üretim SIRALI kuyruktan, kitap başına en az
+   3 saniye arayla koşar (toplu içe aktarım worker'ı dövmesin). Kapılar hem
+   aday anında hem İŞLEM anında denetlenir (özet bu arada yedekten inmiş
+   olabilir). Varsayılan KAPALI — Ayarlar ▸ Zenginleştir'den bilerek açılır.
+   'bulunamadi' → deftere işlenir, yeniden denenmez, Ayarlar sayacında görünür.
+   'hata' / tanınmayan yanıt / ağ arızası → SESSİZCE durulur, kuyruk korunur
+   (çevrimdışı eklenen kitap sonraki çevrimiçi oturumda sırasını bekler). */
+const TASLAK_AYAR_ANAHTAR = 'kk_taslak_ayar_v1';     // '1' = açık; VARSAYILAN KAPALI
+const TASLAK_KUYRUK_ANAHTAR = 'kk_taslak_kuyruk_v1';
+const TASLAK_DEFTER_ANAHTAR = 'kk_taslak_defter_v1'; // id -> { s:'red'|'yok', t }
+const TASLAK_ARA_MS = 3000;
+const TASLAK_KUYRUK_TAVAN = 100;
+function taslakAyarAcik(){ try{ return localStorage.getItem(TASLAK_AYAR_ANAHTAR) === '1'; }catch(e){ return false; } }
+function taslakDefterOku(){ try{ return JSON.parse(localStorage.getItem(TASLAK_DEFTER_ANAHTAR)) || {}; }catch(e){ return {}; } }
+function taslakDefterYaz(d){ try{ localStorage.setItem(TASLAK_DEFTER_ANAHTAR, JSON.stringify(d)); }catch(e){} }
+function taslakKuyrukOku(){ try{ const k = JSON.parse(localStorage.getItem(TASLAK_KUYRUK_ANAHTAR)); return Array.isArray(k) ? k : []; }catch(e){ return []; } }
+function taslakKuyrukYaz(k){ try{ localStorage.setItem(TASLAK_KUYRUK_ANAHTAR, JSON.stringify(k)); }catch(e){} }
+function taslakAday(id){
+  if(!id || !taslakAyarAcik()) return;
+  const k = (veri.kitaplar || []).find(x => x.id === id);
+  if(!k) return;
+  if(k.ozetVar || k.ozet || window.__ozet.oku(id)) return;   // özeti olana üretim yok
+  if(window.__taslak.var(id)) return;                        // bekleyen taslağı olana yok
+  if(taslakDefterOku()[id]) return;                          // atılan/bulunamayan yeniden denenmez
+  const kuyruk = taslakKuyrukOku();
+  if(kuyruk.includes(id)) return;
+  kuyruk.push(id);
+  taslakKuyrukYaz(kuyruk.slice(-TASLAK_KUYRUK_TAVAN));
+  taslakKuyrukIsle();
+}
+let taslakIsliyor = false;
+async function taslakKuyrukIsle(){
+  if(taslakIsliyor) return;
+  taslakIsliyor = true;
+  try{
+    while(true){
+      if(!taslakAyarAcik()) break;
+      if(!navigator.onLine) break;               // çevrimdışı: kuyruk bekler
+      if(!taslakKuyrukOku().length) break;
+      /* her kitaptan önce bekleme: hem 3 sn aralık sözleşmesi hem de yedekten
+         geri yüklemede özetlerin IDB'ye inmesine zaman tanır (işlem-anı
+         kapısı o özeti görüp adayı düşürür) */
+      await new Promise(r => setTimeout(r, TASLAK_ARA_MS));
+      const kuyruk = taslakKuyrukOku();
+      if(!kuyruk.length) break;
+      const id = kuyruk[0];
+      const k = (veri.kitaplar || []).find(x => x.id === id);
+      if(!k || k.ozetVar || k.ozet || window.__ozet.oku(id)
+        || window.__taslak.var(id) || taslakDefterOku()[id]){
+        taslakKuyrukYaz(taslakKuyrukOku().filter(x => x !== id));
+        continue;
+      }
+      let j = null;
+      try{
+        const r = await fetch(ARA_KOK + '/ozet-taslak', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ad: k.ad, yazar: k.yazar || '', isbn: k.isbn || '',
+            yayinevi: k.yayinevi || '', yil: k.yil || null, sayfa: k.sayfa || null })
+        });
+        j = await r.json();
+      }catch(e){ break; }   // ağ arızası: kuyruğu koru, sonraki oturum dener
+      if(j && j.durum === 'tamam' && typeof j.metin === 'string' && j.metin.trim()){
+        // TASLAK deposuna yazılır — __ozet'e ASLA (onay kullanıcının)
+        await window.__taslak.kaydet(id, j.metin.trim(), j.kaynak);
+        taslakKuyrukYaz(taslakKuyrukOku().filter(x => x !== id));
+        if(durum.detayId === id && typeof detayAc === 'function') detayAc(id);
+      }else if(j && j.durum === 'bulunamadi'){
+        const d = taslakDefterOku(); d[id] = { s: 'yok', t: Date.now() }; taslakDefterYaz(d);
+        taslakKuyrukYaz(taslakKuyrukOku().filter(x => x !== id));
+        tsDurumTazele();
+      }else{
+        break;   // 'hata' (anahtar yok/günlük sınır) ya da tanınmayan yanıt: sessiz dur, kuyruk kalsın
+      }
+    }
+  }finally{ taslakIsliyor = false; tsDurumTazele(); }
+}
+/* Ayarlar ▸ Zenginleştir satırı: açık/kapalı + sıra + kaynak-bulunamadı sayacı */
+function tsDurumTazele(){
+  const kutu = document.getElementById('tsDurum');
+  if(!kutu) return;
+  const acik = taslakAyarAcik();
+  const yok = Object.values(taslakDefterOku()).filter(x => x && x.s === 'yok').length;
+  const bekleyen = taslakKuyrukOku().length;
+  kutu.textContent = (acik ? 'Açık — yeni eklenen kitap için taslak hazırlanır.' : 'Kapalı.')
+    + (bekleyen ? ' ' + bekleyen + ' kitap sırada.' : '')
+    + (yok ? ' ' + yok + ' kitapta kaynak bulunamadı.' : '');
+  const dugme = document.querySelector('[data-act="ts-ayar"]');
+  if(dugme) dugme.textContent = acik ? 'Taslak üretimini kapat' : 'Taslak üretimini aç';
 }
 
 /* ---------- yardımcılar ---------- */
@@ -2691,6 +2895,7 @@ function formKaydet(){
     veri.kitaplar.push(yeni);
     kayitId = yeni.id;
     toast('Kitap rafa eklendi' + ikizUyari);
+    taslakAday(yeni.id);   // v82: yeni kitap taslak özet adayı (ayar kapalıysa sessiz no-op)
     /* Otomatik tür (v65): YENİ kitapta tür boşsa zengin.js motoru arkadan
        doldurur (aynı motor — kod kopyası yok). Kayıt BEKLEMEZ: kuyruk asenkron,
        tür gelince alan + damga güncellenir; bulunamazsa boş kalır (uydurma yok).
@@ -2714,9 +2919,9 @@ function formKaydet(){
 function detayAc(id){
   const k = kitapBul(id);
   if(!k) return;
-  // özet/ontoloji bölümü geçici durumları kitaba bağlı: başka kitaba geçişte sıfırlanır
+  // özet/ontoloji/taslak bölümü geçici durumları kitaba bağlı: başka kitaba geçişte sıfırlanır
   if(durum.detayId !== id){ durum.ozetDuzenle = null; durum.ozetAcik = false;
-    durum.ontoDuzenle = null; durum.ontoAcik = false; }
+    durum.ontoDuzenle = null; durum.ontoAcik = false; durum.taslakAcik = null; }
   durum.detayId = id;
   const kap = document.getElementById('detayIcerik');
   const rSinif = { okunuyor:'r-okunuyor', bitti:'r-bitti', okunacak:'r-okunacak', yarim:'r-yarim' }[k.durum];
@@ -2811,6 +3016,34 @@ function detayAc(id){
         <button class="onto-ghost" data-act="onto-ac">Düzenle</button></div>
       <div class="onto-metin">${esc(uzun ? oMetin.slice(0, 600) : oMetin)}${uzun ? '…' : ''}</div>
       ${uzun ? '<button class="onto-sessiz" data-act="onto-devam">Devamını göster</button>' : ''}
+    </div>`;
+  };
+
+  /* TASLAK ÖZET şeridi (v82) — özet bloğunun ÜSTÜNDE. Yalnız ÖZET BOŞKEN
+     çizilir: özet doluyken "Özet olarak kaydet" sunmak kullanıcının elle
+     yazdığı metni model metniyle ezme davetiyesi olurdu (EN ÖNEMLİ KURAL).
+     Onaylanmayan metin kütüphaneye girmez: Kaydet → __ozet.kaydet + taslak
+     silinir; At → taslak silinir + deftere 'red' (bir daha üretilmez). */
+  const taslakHtml = () => {
+    if(!window.__taslak || !window.__taslak.var(k.id)) return '';
+    if(window.__ozet.oku(k.id) || k.ozet) return '';
+    if(durum.taslakAcik !== k.id){
+      return `<div class="detay-satir ts-serit" id="dTaslakSerit">
+        <button class="ts-ghost" data-act="ts-oku">Taslak özet hazır — oku</button>
+        <div class="mini-not" style="margin-top:6px">Bu metin otomatik üretildi, doğrulanmadı.</div>
+      </div>`;
+    }
+    const t = window.__taslak.oku(k.id) || { metin: '', kaynak: [] };
+    return `<div class="detay-satir" id="dTaslakBlok">
+      <div class="d-bolum-bas"><span class="kicker">Taslak özet</span></div>
+      <div class="mini-not" style="margin-top:0">Bu metin otomatik üretildi, doğrulanmadı.${
+        (t.kaynak || []).length ? ' Kaynak doğrulaması: ' + esc(t.kaynak.join(', ')) + '.' : ''}</div>
+      <div class="ts-govde">${esc(t.metin)}</div>
+      <div class="ts-eylem">
+        <button class="btn btn-cerceve btn-kucuk" data-act="ts-kaydet">Özet olarak kaydet</button>
+        <button class="btn btn-cerceve btn-kucuk" data-act="ts-duzenle">Düzenleyerek kaydet</button>
+        <button class="ts-sessiz" data-act="ts-at">At</button>
+      </div>
     </div>`;
   };
 
@@ -2993,7 +3226,7 @@ function detayAc(id){
     ${eylemHtml}
     ${kunyeHtml}
     ${etiketHtml}
-    ${ozetHtml()}${ontoHtml()}
+    ${taslakHtml()}${ozetHtml()}${ontoHtml()}
     <div class="detay-satir">
       <div class="d-bolum-bas"><span class="kicker">Notlar &amp; alıntılar</span><button class="oc-ghost" data-act="oc-baslat">${ikon('kamera')} Fotoğraftan</button></div>
       <div class="not-tip-sec">
@@ -3487,6 +3720,7 @@ function iceAktar(dosya){
         veri.kitaplar.push(kayit);
         mevcutIdler.add(kayit.id);
         mevcut.add(anah(k)); eklendi++;
+        taslakAday(kayit.id);   // v82: kuyruk sıralı + 3 sn aralıklı, toplu geri yükleme worker'ı dövmez
       });
       if(y.hedef && typeof y.hedef === 'object') veri.hedef = { ...y.hedef, ...veri.hedef };
       if(y.kesfetGizli && typeof y.kesfetGizli === 'object')
@@ -3587,6 +3821,7 @@ function goodreadsAktar(dosya){
         });
         veri.kitaplar.push(k);
         mevcut.add(anah(k)); eklendi++;
+        taslakAday(k.id);   // v82: sıralı kuyruk, kitap başına ≥3 sn ara
       }
       depoKaydet(); hepsiniCiz();
       toast(eklendi
@@ -3980,7 +4215,7 @@ document.addEventListener('click', e => {
 
   switch(act){
     case 'sekme': sekmeGec(v); break;
-    case 'ayar-ac': ayarAc(); ozDepoBilgiTazele(); break;
+    case 'ayar-ac': ayarAc(); ozDepoBilgiTazele(); tsDurumTazele(); break;
     case 'ayar-kapat': ayarKapat(); break;
     /* Ana sayfa köprüleri — hepsi mevcut yollara bağlanır, yeni mantık yok.
        (ana-okunuyor v47'de emekli: "Tümü" düğmesi kalktı, devam bölümü
@@ -4249,6 +4484,9 @@ document.addEventListener('click', e => {
         window.__ozet.kaydet(k.id, metin).then(tamam => {
           if(!tamam){ toast('Özet kaydedilemedi — cihaz depolama alanını kontrol et'); return; }
           delete k.ozet;   // göç penceresinden kalmış miras alan varsa artık IDB'de
+          // v82: özet artık dolu → bekleyen taslak bayatladı ("Düzenleyerek
+          // kaydet" yolunun da temizliği burası)
+          if(metin && window.__taslak && window.__taslak.var(k.id)) window.__taslak.sil(k.id);
           durum.ozetDuzenle = null;
           listeCiz();   // özetsiz çipi/araması tazelensin; raf kartı etkilenmez
           if(durum.detayId === k.id) detayAc(k.id);
@@ -4281,6 +4519,51 @@ document.addEventListener('click', e => {
           toast(metin ? 'Ontoloji kaydedildi' : 'Ontoloji silindi');
         });
       }
+      break; }
+    /* Taslak özet eylemleri (v82). Kaydet yolları __ozet.kaydet'ten geçer —
+       taslak deposundan özet deposuna geçiş YALNIZ burada, kullanıcı onayıyla. */
+    case 'ts-oku': durum.taslakAcik = durum.detayId; detayAc(durum.detayId); break;
+    case 'ts-kaydet': {
+      const k = kitapBul(durum.detayId);
+      const t = k && window.__taslak.oku(k.id);
+      if(k && t && t.metin){
+        window.__ozet.kaydet(k.id, t.metin).then(tamam => {
+          if(!tamam){ toast('Özet kaydedilemedi — cihaz depolama alanını kontrol et'); return; }
+          window.__taslak.sil(k.id);
+          durum.taslakAcik = null;
+          listeCiz();
+          if(durum.detayId === k.id) detayAc(k.id);
+          toast('Taslak özet olarak kaydedildi');
+        });
+      }
+      break; }
+    case 'ts-duzenle': {
+      const k = kitapBul(durum.detayId);
+      const t = k && window.__taslak.oku(k.id);
+      if(k && t){
+        // taslak SİLİNMEZ: kullanıcı vazgeçerse şerit geri gelir; kaydederse
+        // oz-kaydet başarı yolu bayat taslağı temizler
+        durum.taslakAcik = null;
+        durum.ozetDuzenle = k.id;
+        detayAc(k.id);
+        const ta = document.getElementById('ozMetin');
+        if(ta){ ta.value = t.metin; ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+      }
+      break; }
+    case 'ts-at': {
+      const k = kitapBul(durum.detayId);
+      if(k){
+        window.__taslak.sil(k.id).then(() => {
+          const d = taslakDefterOku(); d[k.id] = { s: 'red', t: Date.now() }; taslakDefterYaz(d);
+          durum.taslakAcik = null;
+          if(durum.detayId === k.id) detayAc(k.id);
+        });
+      }
+      break; }
+    case 'ts-ayar': {
+      try{ localStorage.setItem(TASLAK_AYAR_ANAHTAR, taslakAyarAcik() ? '0' : '1'); }catch(e){}
+      tsDurumTazele();
+      if(taslakAyarAcik()) taslakKuyrukIsle();   // açılınca bekleyen kuyruk işlesin
       break; }
     case 'ilerleme-kaydet': {
       const k = kitapBul(durum.detayId);
@@ -4447,6 +4730,12 @@ window.__ozet.hazirBekle().then(() => {
   if(typeof listeCiz === 'function' && durum.sekme === 'raf') listeCiz();
   if(durum.detayId && typeof detayAc === 'function') detayAc(durum.detayId);
 });
+/* Taslak özet deposu (v82): IDB → bellek + yetim süpürücü. Önceki oturumdan
+   kalan kuyruk özet yüklemesi BİTİNCE işlenir (işlem-anı kapısı özeti görsün);
+   çevrimdışı → çevrimiçi geçişinde de kuyruk uyanır. */
+taslakDepoBaslat();
+window.__ozet.hazirBekle().then(() => { taslakKuyrukIsle(); });
+window.addEventListener('online', () => { taslakKuyrukIsle(); });
 /* Çip satırları kaydırma işareti: kenarda gizli içerik varken o kenar maskeyle
    solar (kayar-bas/kayar-son). Dinleyici pasif, ilk durum hemen basılır. */
 function cipKaydirmaKur(){
