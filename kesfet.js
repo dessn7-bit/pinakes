@@ -880,6 +880,10 @@
     if(!yeni.tur && window.__zengin && window.__zengin.otoTur)
       window.__zengin.otoTur(yeni.id,
         (Array.isArray(a.kategoriler) && a.kategoriler.length) ? a.kategoriler : null);
+    /* Taslak özet (v83): otoTur ile AYNI nokta — istek listesine eklenen de
+       yeni kitaptır; v82 yalnız form yoluna bağlamıştı (spec eksiği).
+       Kapılar taslakAday içinde (ayar kapalıysa sessiz no-op). */
+    if(typeof taslakAday === 'function') taslakAday(yeni.id);
     if(typeof toast === 'function') toast('İstek listene eklendi');
     if(typeof hepsiniCiz === 'function') hepsiniCiz();   // sarmalama Keşfet'i tazeler
     ciz();

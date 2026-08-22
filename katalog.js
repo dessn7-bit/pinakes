@@ -214,6 +214,11 @@
     if(!kayit.tur && window.__zengin && window.__zengin.otoTur)
       window.__zengin.otoTur(kayit.id,
         (Array.isArray(k.kategoriler) && k.kategoriler.length) ? k.kategoriler : null);
+    /* Taslak özet (v83): otoTur ile AYNI nokta, aynı desen — v82'de yalnız
+       form yoluna bağlanmıştı (spec eksiği). Seri taramada ek önlem yok:
+       taslak kuyruğu zaten kitap başına ≥3 sn serileştiriyor. Kapılar
+       (ayar/özet/taslak/defter/çevrimdışı) taslakAday içinde. */
+    if(typeof taslakAday === 'function') taslakAday(kayit.id);
     if(typeof hepsiniCiz === 'function') hepsiniCiz();
     oturumKayitlari.push({ id: kayit.id, ad: kayit.ad, yazar: kayit.yazar });
     listeCizSeri(); rafListesiDoldur(); bip();
