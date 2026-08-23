@@ -3736,12 +3736,27 @@ function iceAktar(dosya){
       const anah = k => katla(k.ad + '|' + (k.yazar||''));
       const mevcut = new Set(veri.kitaplar.map(anah));
       const mevcutIdler = new Set(veri.kitaplar.map(k => k.id));
+      const idHarita = new Map();     // v86: yedekteki eski id → verilen YENİ id (çakışma yolu)
+      const disiKalan = new Set();    // v86: özeti YAZILMAYACAK yedek kitaplarının id'leri
+      const yerelIdKitap = new Map(veri.kitaplar.map(x => [x.id, x]));
       y.kitaplar.forEach(k => {
         // 1) Aynı kitap (ad+yazar) zaten varsa atla — mükerrer kayıt olmasın.
-        if(!k || !k.ad || mevcut.has(anah(k))) return;
+        if(!k || !k.ad || mevcut.has(anah(k))){
+          /* v86: atlanan kitabın özeti yalnız id yereldeki AYNI kitaba aitse
+             yazılabilir (normal yedek geri yüklemesi — damga kapısı korur).
+             Id yerelde yoksa özet YETİM kalır (süpürücü siler), yerelde BAŞKA
+             kitaba aitse onun özetini ezer — iki durumda da yazılmaz. */
+          if(k && k.id){
+            const yerel = yerelIdKitap.get(k.id);
+            if(!yerel || !k.ad || anah(yerel) !== anah(k)) disiKalan.add(String(k.id));
+          }
+          return;
+        }
         // 2) Farklı kitap ama id çakışıyorsa YENİ id ver: aynı id'li iki kayıt
         //    senkron birleştirmesinde birbirini yok ediyor, tek "Sil" ikisini birden siliyordu.
-        const kayit = kitapNormalize(mevcutIdler.has(k.id) ? { ...k, id: uid() } : k);
+        const cakisti = mevcutIdler.has(k.id);
+        const kayit = kitapNormalize(cakisti ? { ...k, id: uid() } : k);
+        if(cakisti && k.id) idHarita.set(String(k.id), kayit.id);
         veri.kitaplar.push(kayit);
         mevcutIdler.add(kayit.id);
         mevcut.add(anah(k)); eklendi++;
@@ -3760,9 +3775,18 @@ function iceAktar(dosya){
          v81: kayıttaki o (ontoloji) 4. parametreyle taşınır; o'suz eski
          yedekte undefined gider — kaydetHam mevcut ontolojiyi KORUR. */
       if(y.ozetler && typeof y.ozetler === 'object'){
+        /* v86: özet id'leri kitap döngüsünün verdiği YENİ id'lerden geçirilir.
+           Eski id'ye yazmak, o id'yi taşıyan YEREL BAŞKA kitabın özetini damgası
+           yeniyse sessizce eziyordu — v81 "id çakışması → mevcut ezilmez"
+           kararının özet katmanı. İçeri alınmayan (mükerrer/bozuk) kitabın
+           özeti hiç yazılmaz: işaret basacak kitap bulunamayıp yetim kalıyor,
+           açılış süpürücüsü onu siliyordu. Haritada/atlananlarda OLMAYAN id'ler
+           (yedekte kitabı olmayan salt-özet kayıtları) eski davranışla, damga
+           kapısından geçerek aynen yazılır. */
         const girisler = Object.entries(y.ozetler)
-          .filter(([id, o]) => o && typeof o.m === 'string' &&
-            (parseInt(o.g) || 0) > window.__ozet.damga(id));
+          .filter(([id, o]) => o && typeof o.m === 'string' && !disiKalan.has(id))
+          .map(([id, o]) => [idHarita.get(id) || id, o])
+          .filter(([id, o]) => (parseInt(o.g) || 0) > window.__ozet.damga(id));
         if(girisler.length) Promise.all(girisler.map(([id, o]) =>
           window.__ozet.kaydetHam(id, o.m, o.g, o.o)))
           .then(() => { depoKaydet(); if(typeof listeCiz === 'function') listeCiz(); });

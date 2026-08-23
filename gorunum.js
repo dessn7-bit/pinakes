@@ -478,7 +478,22 @@
       'toplu-durum-uygula');
   }
 
+  /* v86: seçim kümesi yalnız EKRANDA duran kartları kapsar. Arama/filtre/grup/
+     düzen değişince görünmeyen id'ler kümeden düşer — yoksa toplu işlemler
+     (kalıcı silme dahil) kullanıcının GÖRMEDİĞİ kitaplara uygulanıyordu.
+     Karar (a)-kesiştirme, (b)-modu-kapat yerine: seri "ara→seç→ara→seç" akışı
+     yaşasın; çubuktaki sayaç zaten her daralmayı anında gösterir. Seçici,
+     kart tıklama işleyicisiyle AYNI ('#liste .kart') — ızgara düzeninde kart
+     olmadığı için seçim doğal olarak boşalır (ızgarada seçim arayüzü de yok,
+     görünmez seçim taşımak tam da kapatılan kusurdu). */
+  function secimGorunenKesistir(){
+    if(!secimModu || !secilenler.size) return;
+    const gorunen = new Set([...document.querySelectorAll('#liste .kart')]
+      .map(k => k.dataset.id).filter(Boolean));
+    [...secilenler].forEach(id => { if(!gorunen.has(id)) secilenler.delete(id); });
+  }
   function secilenKitaplar(){
+    secimGorunenKesistir();   // v86: görünmeyen (filtreyle elenmiş) kitap hedef olamaz
     return [...secilenler].map(kitapBulL).filter(Boolean);
   }
   function kaydetVeTazele(mesaj){
@@ -509,6 +524,7 @@
         const s = asil.apply(this, arguments);
         dugmeEkle();
         duzenTazele();
+        secimGorunenKesistir();   // v86: yeniden çizimde görünmeyen seçim düşer
         secimGorselTazele();
         return s;
       };
@@ -589,7 +605,9 @@
       if(act === 'toplu-etiket'){ topluEtiketAc(); return; }
       if(act === 'toplu-durum'){ topluDurumAc(); return; }
       if(act === 'toplu-sil'){
+        secimGorunenKesistir();   // v86: ekranda olmayan kitap silinemez
         const n = secilenler.size;
+        if(!n){ bildir('Önce kitap seç'); return; }
         if(!confirm(n + ' kitap kalıcı olarak silinsin mi? Notları ve oturumları da silinir.')) return;
         veri.silinenler = veri.silinenler || {};
         const t = Date.now();

@@ -139,7 +139,15 @@
       simdiki[k.id] = pf;
       // göç turunda parmak izi biçimi değiştiği için içerik değişmemiş sayılır:
       // aksi halde tüm kütüphane taze damgalanır ve bayat cihaz güncel olanı ezerdi
-      if(!k.g || (!goc && onceki[k.id] !== pf)) k.g = t;
+      /* v86: İZİ OLMAYAN ama damgası DOLU kitap da yeniden damgalanmaz — iz
+         deposu boş cihaza (telefon sıfırlama + eski yedek) toplu şimdi-damgası
+         basılıyor, bayat kopya odadaki günceli eziyor ve silinmişler
+         diriliyordu (göç yorumundaki tehlikenin boş-depo ikizi). Kural kitap
+         başına: damga taşıyan kitap geçmişi olan kitaptır, izi yoksa taban
+         KURULUR (aşağıda simdiki'ye yazılır) ama damgası korunur; damgasız
+         kitap (yeni eklenen) her zamanki gibi damgalanır. İlk kurulumla
+         yedekten-dönüşü ayırt etmeye gerek kalmaz — ayrım g alanında. */
+      if(!k.g || (!goc && (k.id in onceki) && onceki[k.id] !== pf)) k.g = t;
       if(veri.silinenler[k.id] && veri.silinenler[k.id] < k.g) delete veri.silinenler[k.id];
     }
     if(!goc) for(const id of Object.keys(onceki))
@@ -152,6 +160,60 @@
       if(!veri.hedefSayfaG[yil]) veri.hedefSayfaG[yil] = t;
     if(izleriYaz !== false) anlikKaydet(simdiki);
     return simdiki;
+  }
+
+  /* ---------- çok-sekme koruması (v86) ----------
+     İki sekme aynı localStorage'ı paylaşır ama `veri` belleği sekme-başınadır.
+     Sekme-1 yazdıktan sonra sekme-2 bayat belleğiyle yazarsa damgala, diskteki
+     taze parmak izini "içerik değişmiş" sanıp BAYAT kitaba TAZE damga basar:
+     sekme-1'in kaydı hem depodan silinir hem kaybeden içerik taze damga
+     taşıdığı için kayıp odaya (tüm cihazlara) yayılırdı. İki katman:
+     (1) her başarılı yazım jeton + BroadcastChannel duyurusu yapar; duyan
+         sekme belleğini diskle BİRLEŞTİRİR (ezmez: bu sekmedeki kaydedilmemiş
+         değişiklik LWW/dizi birleşiminde korunur, kullanıcı metni atılmaz);
+     (2) yazım anında jeton kapısı — duyuru henüz işlenmemiş olsa bile yazımdan
+         ÖNCE aynı birleşim koşar (localStorage okuması senkron, aynı thread).
+     BroadcastChannel yoksa storage olayına düşülür. SEMA_SURUM'a dokunmaz:
+     tamamen istemci-içi mekanizma, protokol değişmiyor. */
+  const SEKME_ID = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  const SEKME_ANAHTAR = 'kk_sekme_yazim_v1';
+  let sekmeKanal = null;
+  let bilinenYazim = null;
+  function yazimIsaretle(){
+    bilinenYazim = SEKME_ID + ':' + Date.now();
+    try{ localStorage.setItem(SEKME_ANAHTAR, bilinenYazim); }
+    catch(e){ /* jeton yazılamadı — öbür sekme bir sonraki kapıda diskle uzlaşır */ }
+    try{ if(sekmeKanal) sekmeKanal.postMessage({ tur: 'yazildi', kaynak: SEKME_ID }); }catch(e){}
+  }
+  function sekmeUzlas(){
+    let jeton = null;
+    try{ jeton = localStorage.getItem(SEKME_ANAHTAR); }catch(e){}
+    if(jeton === bilinenYazim) return false;   // araya başka sekmenin yazımı girmemiş
+    bilinenYazim = jeton;
+    try{
+      const ham = localStorage.getItem('kk_kitaplik_v1');
+      if(!ham) return false;
+      const bir = birlestir(veri, JSON.parse(ham));
+      veri.kitaplar = bir.kitaplar; veri.hedef = bir.hedef;
+      veri.hedefG = bir.hedefG; veri.silinenler = bir.silinenler;
+      veri.hedefSayfa = bir.hedefSayfa; veri.hedefSayfaG = bir.hedefSayfaG;
+      veri.kesfetGizli = bir.kesfetGizli || {};
+      veri.kesfetGizliGeri = bir.kesfetGizliGeri || {};
+      veri.turRed = bir.turRed || {};
+      return true;
+    }catch(e){ window._iz && window._iz('sekmeUzlas', e); return false; }
+  }
+  function sekmeKur(){
+    try{ bilinenYazim = localStorage.getItem(SEKME_ANAHTAR); }catch(e){}
+    const tetik = () => { if(sekmeUzlas() && typeof hepsiniCiz === 'function') hepsiniCiz(); };
+    try{
+      if(typeof BroadcastChannel === 'function'){
+        sekmeKanal = new BroadcastChannel('kk_sekmeler_v1');
+        sekmeKanal.onmessage = m => { if(!m || !m.data || m.data.kaynak !== SEKME_ID) tetik(); };
+        return;
+      }
+    }catch(e){ /* kanal kurulamadı — storage olayına düş */ }
+    window.addEventListener('storage', e => { if(e && e.key === SEKME_ANAHTAR) tetik(); });
   }
 
   /* ---------- kimlik ---------- */
@@ -478,6 +540,7 @@
     const odaBasta = ayar.oda;   // uçuş sırasında kes/oda-değiştir yarışına karşı
     const yol = SENKRON_URL.replace(/\/+$/, '') + '/odalar/' + encodeURIComponent(ayar.oda) + '.json';
     try{
+      sekmeUzlas();   // v86: birleşime taze bellek girsin (bayat bellekle PUT diski ezmesin)
       const tok = await kimlikAl();
       /* M1 (TOCTOU): RTDB ETag/if-match — GERÇEK sunucuda doğrulandı
          (X-Firebase-ETag → ETag; bayat if-match → 412). Araya yazan olursa
@@ -556,7 +619,7 @@
         catch(e){ depoTamam = false; if(typeof kotaUyariGoster === 'function') kotaUyariGoster(); }
         const anlik = {};
         veri.kitaplar.forEach(k => { anlik[k.id] = kitapParmak(k); });
-        if(depoTamam){ anlikKaydet(anlik); bekleyenIzler = null; }
+        if(depoTamam){ anlikKaydet(anlik); bekleyenIzler = null; yazimIsaretle(); }   // v86: sekmelere duyur
         else bekleyenIzler = anlik;   // bellek tabanı: damga enflasyonu önlenir
 
         /* semaDustu bilerek SIFIRLANMAZ: şema geri yazılsa da eski sürümlü cihaz
@@ -660,6 +723,7 @@
   /* ---------- bağlanma ---------- */
   function baslat(){
     ayar = ayarYukle();
+    sekmeKur();   // v86: çok-sekme kanalı + jeton tabanı
     kartEkle(); durumCiz();
 
     // depoKaydet'i sarmala: her kayıtta damga + otomatik senkron
@@ -667,6 +731,10 @@
       const asil = window.depoKaydet;
       const sarmal = function(){
         yazimSayaci++;   // PUT uçuşundaki kayıtları senkron başarı yolu fark etsin
+        /* v86 çok-sekme kapısı: başka sekme bizden sonra yazdıysa bellek
+           bayattır — damga basılmadan ÖNCE diskle birleşilir ki bayat içeriğe
+           taze damga basılıp öbür sekmenin kaydı ezilmesin. */
+        if(sekmeUzlas() && typeof hepsiniCiz === 'function') setTimeout(hepsiniCiz, 0);
         // Damgayı ÖNCE bas (g değerleri yazılacak JSON'a girer), izleri SONRA
         // kaydet: depo yazımı kota yüzünden düşerse parmak izi de kalıcılaşmaz
         // (M4b) — aksi halde bayat depo taze iz tabanıyla "değişmemiş" sayılırdı.
@@ -675,6 +743,7 @@
         const s = asil.apply(this, arguments);
         if(s !== false && izler){ anlikKaydet(izler); bekleyenIzler = null; }
         else if(izler) bekleyenIzler = izler;   // bellek tabanı: damga enflasyonu önlenir
+        if(s !== false) yazimIsaretle();   // v86: öbür sekmeler belleğini tazelesin
         planla();
         return s;
       };

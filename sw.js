@@ -1,4 +1,4 @@
-const CACHE = 'kitaplik-v85';
+const CACHE = 'kitaplik-v86';
 // OCR paketi kovası (ocr.js yönetir): ~6 MB'lik tesseract paketi kullanıcı
 // ONAYIYLA bir kez iner, buraya alınır. ASSETS'e BİLEREK girmez — ilk PWA
 // kurulumunda 6 MB indirtmek yanlış olurdu. ocr.js dosyasının kendisi (küçük
