@@ -1,4 +1,4 @@
-const CACHE = 'kitaplik-v84';
+const CACHE = 'kitaplik-v85';
 // OCR paketi kovası (ocr.js yönetir): ~6 MB'lik tesseract paketi kullanıcı
 // ONAYIYLA bir kez iner, buraya alınır. ASSETS'e BİLEREK girmez — ilk PWA
 // kurulumunda 6 MB indirtmek yanlış olurdu. ocr.js dosyasının kendisi (küçük
@@ -27,7 +27,7 @@ self.addEventListener('fetch', e => {
   // karışma: tarayıcı doğrudan gitsin, hiçbir şey saklanmasın.
   let ayniKoken = false;
   let yol = '';
-  try { const u = new URL(e.request.url); ayniKoken = u.origin === self.location.origin; yol = u.pathname; } catch (h) {}
+  try { const u = new URL(e.request.url); ayniKoken = u.origin === self.location.origin; yol = u.pathname; } catch (h) { /* URL ayrıştırılamadı — sessiz geçiş kasıtlı */ }
   if (!ayniKoken) return;
 
   // OCR paket dosyaları: ÖNCE kova, yoksa ağ. Network-first buraya uygulanmaz —
@@ -44,7 +44,9 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     fetch(e.request).then(res => {
       const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(e.request, copy));
+      // Önbelleğe yazamamak (kota dolu vb.) yanıtı ETKİLEMEMELİ — sessiz geçiş
+      // DOĞRU; catch'siz hali yakalanmamış promise reddi bırakıyordu.
+      caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
       return res;
     }).catch(() => caches.match(e.request).then(r => {
       if (r) return r;
@@ -69,14 +71,14 @@ function bildirimOzetOku(anahtar) {
     const son = v => { if (!bitti) { bitti = true; resolve(v); } };
     try {
       const istek = indexedDB.open(BILDIRIM_DB, 1);
-      istek.onupgradeneeded = () => { try { istek.result.createObjectStore('ozet'); } catch (e) {} };
+      istek.onupgradeneeded = () => { try { istek.result.createObjectStore('ozet'); } catch (e) { /* mağaza zaten var — sessiz geçiş kasıtlı */ } };
       istek.onsuccess = () => {
         const db = istek.result;
         try {
           const g = db.transaction('ozet', 'readonly').objectStore('ozet').get(anahtar || 'guncel');
-          g.onsuccess = () => { son(g.result || null); try { db.close(); } catch (e) {} };
-          g.onerror = () => { son(null); try { db.close(); } catch (e) {} };
-        } catch (e) { son(null); try { db.close(); } catch (h) {} }
+          g.onsuccess = () => { son(g.result || null); try { db.close(); } catch (e) { /* zaten kapalı — kasıtlı */ } };
+          g.onerror = () => { son(null); try { db.close(); } catch (e) { /* zaten kapalı — kasıtlı */ } };
+        } catch (e) { son(null); try { db.close(); } catch (h) { /* zaten kapalı — kasıtlı */ } }
       };
       istek.onerror = () => son(null);
     } catch (e) { son(null); }
@@ -187,7 +189,7 @@ self.addEventListener('notificationclick', e => {
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(liste => {
     for (const istemci of liste) {
       let ayni = false;
-      try { ayni = new URL(istemci.url).origin === self.location.origin; } catch (h) {}
+      try { ayni = new URL(istemci.url).origin === self.location.origin; } catch (h) { /* URL ayrıştırılamadı — sessiz geçiş kasıtlı */ }
       if (ayni) {
         /* açık sekme: odakla + sayfaya NEREYE gideceğini söyle. 'tekrar-ac'
            mesajı korunuyor (mevcut vaka + eski SW/sayfa eşleşmesi). */

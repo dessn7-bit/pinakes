@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#F2EFE7" id="temaRengi">
 <script>
+/* Teşhis kanalı: yutulan (catch'lenen) YAZMA hataları buradan iz bırakır.
+   Varsayılan SESSİZ — window.__KK_IZ TANIMSIZ; yalnız konsoldan
+   window.__KK_IZ = true denince konuşur. Ayarlar'da düğmesi BİLEREK yok:
+   normal kullanıcıda hiçbir şey değişmesin. */
+function _iz(yer, e){ if(window.__KK_IZ) console.warn('[kk]', yer, e); }
 /* Tema ilk boyamadan ÖNCE uygulanır (aksi halde açık tema bir an yanıp söner).
    Tercih: acik | karanlik | sistem (varsayılan). data-tema ÇÖZÜLMÜŞ değeri taşır. */
 (function(){
@@ -29,7 +34,7 @@
   };
   window.temaTercihi = tercih;
   window.temaYaz = function(v){
-    try{ (v === 'sistem') ? localStorage.removeItem(ANAHTAR) : localStorage.setItem(ANAHTAR, v); }catch(e){}
+    try{ (v === 'sistem') ? localStorage.removeItem(ANAHTAR) : localStorage.setItem(ANAHTAR, v); }catch(e){ _iz('temaYaz', e); }
     return window.temaUygula();
   };
   window.temaUygula();
@@ -37,7 +42,7 @@
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(){
       if(tercih() === 'sistem') window.temaUygula();
     });
-  }catch(e){}
+  }catch(e){ /* özellik yok (eski tarayıcı) — sessiz geçiş kasıtlı */ }
 })();
 </script>
 <title>Kitaplık</title>
@@ -174,6 +179,13 @@ button{font-family:inherit;font-style:normal;cursor:pointer;border:none;backgrou
 input,select,textarea{font-family:inherit;font-style:normal;font-size:1rem;background:transparent;
   color:var(--paper);border:1px solid var(--kontur);border-radius:var(--r-md);padding:10px 12px;width:100%}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--brass);outline-offset:-1px;border-color:var(--brass)}
+/* Klavye gezintisinde odak halkası: :focus-visible yalnız klavye odağında
+   tetiklenir, fare tıklaması halka çizmez. Form öğeleri yukarıdaki kendi
+   :focus tasarımını (−1px iç halka) korur — reset onları bilerek DIŞLAR
+   (dışlamasa :not() zinciri özgüllüğü yükseltip fareyle tıklanan select'in
+   halkasını da söndürürdü). --brass her iki temada AA kontrastlı vurgu. */
+:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+:focus:not(:focus-visible):not(input):not(select):not(textarea){outline:none}
 textarea{resize:vertical;min-height:60px}
 label{display:block;font-size:.8rem;color:var(--muted);margin:14px 0 4px;letter-spacing:.03em}
 input::placeholder,textarea::placeholder{color:var(--muted2);font-style:normal}
@@ -1585,12 +1597,12 @@ function siralaYukle(){
     const ham = localStorage.getItem(SIRALA_ANAHTAR);
     /* anahtar yok = kullanıcı hiç seçim yapmamış → varsayılana dokunma */
     if(ham !== null && SIRALAMALAR.indexOf(ham) >= 0) durum.sirala = ham;
-  }catch(e){}
+  }catch(e){ /* okuma düştü → varsayılan sıralama; sessiz geçiş kasıtlı */ }
   const s = document.getElementById('sirala');
   if(s) s.value = durum.sirala;
 }
 function siralaKaydet(){
-  try{ localStorage.setItem(SIRALA_ANAHTAR, durum.sirala); }catch(e){}
+  try{ localStorage.setItem(SIRALA_ANAHTAR, durum.sirala); }catch(e){ _iz('siralaKaydet', e); }
 }
 
 /* ---------- depo + geriye uyumlu göç ---------- */
@@ -1781,7 +1793,7 @@ function ozDbAc(){
     istek.onsuccess = () => {
       const db = istek.result;
       db.onclose = () => { ozDbSoz = null; };
-      db.onversionchange = () => { try{ db.close(); }catch(e){} ozDbSoz = null; };
+      db.onversionchange = () => { try{ db.close(); }catch(e){ /* zaten kapalı — kasıtlı */ } ozDbSoz = null; };
       cozul(db);
     };
     istek.onerror = () => kir(istek.error || new Error('açılamadı'));
@@ -1955,7 +1967,7 @@ function ozDepoBilgiTazele(){
         if(oran >= 80) metin += ' — YER AZALIYOR, yedek almayı düşün';
       }
       kutu.textContent = metin;
-    }).catch(() => { kutu.textContent = metin; });
+    }).catch(() => { kutu.textContent = metin + ' · cihaz deposu: hesaplanamadı'; });
   }else kutu.textContent = metin;
 }
 function ozKotaDenetle(){
@@ -1965,7 +1977,7 @@ function ozKotaDenetle(){
       ozetKotaUyarildi = true;
       toast('Cihaz deposu %80 doldu — yedek al, yer açmayı düşün');
     }
-  }).catch(() => {});
+  }).catch(() => { /* tahmin alınamadıysa uyarı da yok — sessiz geçiş kasıtlı */ });
 }
 
 /* ---------- TASLAK ÖZET deposu (v82) ----------
@@ -1993,7 +2005,7 @@ function tsDbAc(){
     istek.onsuccess = () => {
       const db = istek.result;
       db.onclose = () => { tsDbSoz = null; };
-      db.onversionchange = () => { try{ db.close(); }catch(e){} tsDbSoz = null; };
+      db.onversionchange = () => { try{ db.close(); }catch(e){ /* zaten kapalı — kasıtlı */ } tsDbSoz = null; };
       cozul(db);
     };
     istek.onerror = () => kir(istek.error || new Error('açılamadı'));
@@ -2086,9 +2098,9 @@ const TASLAK_ARA_MS = 1000;
 const TASLAK_KUYRUK_TAVAN = 100;
 function taslakAyarAcik(){ try{ return localStorage.getItem(TASLAK_AYAR_ANAHTAR) === '1'; }catch(e){ return false; } }
 function taslakDefterOku(){ try{ return JSON.parse(localStorage.getItem(TASLAK_DEFTER_ANAHTAR)) || {}; }catch(e){ return {}; } }
-function taslakDefterYaz(d){ try{ localStorage.setItem(TASLAK_DEFTER_ANAHTAR, JSON.stringify(d)); }catch(e){} }
+function taslakDefterYaz(d){ try{ localStorage.setItem(TASLAK_DEFTER_ANAHTAR, JSON.stringify(d)); }catch(e){ _iz('taslakDefterYaz', e); } }
 function taslakKuyrukOku(){ try{ const k = JSON.parse(localStorage.getItem(TASLAK_KUYRUK_ANAHTAR)); return Array.isArray(k) ? k : []; }catch(e){ return []; } }
-function taslakKuyrukYaz(k){ try{ localStorage.setItem(TASLAK_KUYRUK_ANAHTAR, JSON.stringify(k)); }catch(e){} }
+function taslakKuyrukYaz(k){ try{ localStorage.setItem(TASLAK_KUYRUK_ANAHTAR, JSON.stringify(k)); }catch(e){ _iz('taslakKuyrukYaz', e); } }
 function taslakAday(id){
   if(!id || !taslakAyarAcik()) return;
   const k = (veri.kitaplar || []).find(x => x.id === id);
@@ -3870,7 +3882,7 @@ function gelenParametre(){
   }catch(e){ return null; }
 }
 function urlTemizle(){
-  try{ history.replaceState({}, '', location.pathname); }catch(e){}
+  try{ history.replaceState({}, '', location.pathname); }catch(e){ /* özellik kısıtlı ortam — sessiz geçiş kasıtlı */ }
 }
 function gelenListeCiz(){
   const q = katla(document.getElementById('gelen-ara').value.trim());
@@ -4211,10 +4223,10 @@ new MutationObserver(kayitlar => {
     if(o.classList.contains('acik')){
       if(!odakGeri) odakGeri = document.activeElement;
       const sheet = o.querySelector('.sheet');
-      if(sheet){ sheet.setAttribute('tabindex', '-1'); setTimeout(() => { try{ sheet.focus(); }catch(h){} }, 0); }
+      if(sheet){ sheet.setAttribute('tabindex', '-1'); setTimeout(() => { try{ sheet.focus(); }catch(h){ /* odaklanamadı — kasıtlı */ } }, 0); }
     }else if(!acikOrtuler().length && odakGeri){
       const g = odakGeri; odakGeri = null;
-      setTimeout(() => { try{ g.focus(); }catch(h){} }, 0);
+      setTimeout(() => { try{ g.focus(); }catch(h){ /* odaklanamadı — kasıtlı */ } }, 0);
     }
   }
   if(ortuDegisti) ortuKatmanlariTazele();
@@ -4364,7 +4376,7 @@ document.addEventListener('click', e => {
     case 'kt-sayfa-ac': {
       const id = el.dataset.id;
       let ot = null;
-      try{ ot = JSON.parse(localStorage.getItem('kk_oturum_v1') || 'null'); }catch(e){}
+      try{ ot = JSON.parse(localStorage.getItem('kk_oturum_v1') || 'null'); }catch(e){ /* bozuk kayıt → oturumsuz davran; sessiz geçiş kasıtlı */ }
       if(ot && ot.kitapId === id){
         // Açık oturumun TEK sayfa girişi oturum şerididir (çifte giriş engeli —
         // oturum.js aynı kuralla çekirdek kutusunu gizliyor); detaya götür.
@@ -4574,7 +4586,7 @@ document.addEventListener('click', e => {
       }
       break; }
     case 'ts-ayar': {
-      try{ localStorage.setItem(TASLAK_AYAR_ANAHTAR, taslakAyarAcik() ? '0' : '1'); }catch(e){}
+      try{ localStorage.setItem(TASLAK_AYAR_ANAHTAR, taslakAyarAcik() ? '0' : '1'); }catch(e){ _iz('taslakAyarYaz', e); }
       tsDurumTazele();
       if(taslakAyarAcik()) taslakKuyrukIsle();   // açılınca bekleyen kuyruk işlesin
       break; }
@@ -4727,7 +4739,7 @@ if('serviceWorker' in navigator){
         }
         const s = p.get('sekme');
         if(s && s !== 'alinti' && document.getElementById('panel-' + s)) sekmeGec(s);
-      }catch(h){}
+      }catch(h){ /* bozuk derin bağlantı — sessiz geçiş kasıtlı */ }
     }
   });
 }
@@ -4794,7 +4806,7 @@ cipKaydirmaKur();
        Sayfa'da kalmasın diye Ayarlar penceresine yönlendiriliyor. */
     if(s === 'yedek'){ ayarAc(); urlTemizle(); return; }
     if(document.getElementById('panel-' + s)){ sekmeGec(s); urlTemizle(); }
-  }catch(e){}
+  }catch(e){ /* bozuk derin bağlantı — sessiz geçiş kasıtlı */ }
 })();
 </script>
 <!-- tekrar.js senkron.js'ten ÖNCE yüklenir. Asıl koruma kitapParmak'ın tekrar*

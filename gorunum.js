@@ -39,7 +39,7 @@
   function ayarYaz(){
     try{ localStorage.setItem(GORUNUM_ANAHTAR,
       JSON.stringify({ duzen, izgara: duzen === 'izgara', grup,
-        rafGrupla: grup === 'raf' })); }catch(e){}
+        rafGrupla: grup === 'raf' })); }catch(e){ window._iz && window._iz('gorunumAyarYaz', e); }
   }
 
   function stilEkle(){

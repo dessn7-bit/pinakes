@@ -21,7 +21,7 @@
       o.frequency.value = 880; g.gain.value = 0.06;
       o.start(); o.stop(ctx.currentTime + 0.09);
       setTimeout(() => ctx.close(), 300);
-    }catch(e){}
+    }catch(e){ /* ses özelliği yok — sessiz geçiş kasıtlı */ }
   }
 
   function formAlaniEkle(){
@@ -284,7 +284,7 @@
             const kod = M.yedekVideoCoz ? M.yedekVideoCoz(v, tuval) : null;
             if(kod) await kodIsle(kod);
           }
-        }catch(e){}
+        }catch(e){ /* bu karede kod çözülemedi (normal) — sessiz geçiş kasıtlı */ }
         calisiyor = false;
       }, 500);
     }catch(e){

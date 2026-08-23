@@ -81,7 +81,7 @@
         if(await c.match(CEKIRDEK_SIMD)) return CEKIRDEK_SIMD;
         if(await c.match(CEKIRDEK_TEMEL)) return CEKIRDEK_TEMEL;
       }
-    }catch(e){}
+    }catch(e){ /* kova okunamadı → SIMD tespitine düş; sessiz geçiş kasıtlı */ }
     return simdVar() ? CEKIRDEK_SIMD : CEKIRDEK_TEMEL;
   }
   async function gerekliler(){ return [MOTOR, ISCI, await cekirdekSec(), MODEL]; }
@@ -163,7 +163,7 @@
       try{
         const y = await (await caches.open(KOVA)).match(MOTOR);
         if(y) src = blobUrl = URL.createObjectURL(await y.blob());
-      }catch(e){}
+      }catch(e){ /* kova okunamadı → ağdan yüklenir; sessiz geçiş kasıtlı */ }
       try{
         await new Promise((coz, kir) => {
           const s = document.createElement('script');

@@ -64,13 +64,13 @@
     try{
       const s = JSON.parse(localStorage.getItem(SAYAC_ANAHTAR));
       if(s && s.gun === gunIso(0)) return { gun: s.gun, islenen: parseInt(s.islenen) || 0 };
-    }catch(e){}
+    }catch(e){ /* bozuk sayaç → sıfırdan başla; sessiz geçiş kasıtlı */ }
     return { gun: gunIso(0), islenen: 0 };
   }
   function sayacArtir(){
     const s = sayacYukle();
     s.islenen++;
-    try{ localStorage.setItem(SAYAC_ANAHTAR, JSON.stringify(s)); }catch(e){}
+    try{ localStorage.setItem(SAYAC_ANAHTAR, JSON.stringify(s)); }catch(e){ window._iz && window._iz('tekrarSayacYaz', e); }
   }
 
   /* ---------- ilk zamanlama + yayılma ----------

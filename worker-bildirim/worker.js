@@ -115,6 +115,19 @@ async function endpointHash(endpoint) {
   return [...new Uint8Array(oz)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+/* KV'den JSON kayıt okuma — bozuk kayıt istisna FIRLATMAZ (fırlatsaydı uç 500
+   dönerdi ve tek bozuk kayıt teşhissiz kalırdı). Dönüş:
+     { ok:true, deger }        kayıt var ve ayrıştı
+     { ok:false, yok:true }    kayıt hiç yok
+     { ok:false, yok:false }   kayıt var ama JSON değil (bozuk)
+   Bozuk kayıt SİLİNMEZ (veri kaybı riski) — çağıran 409 'kayit-bozuk' döner. */
+async function kvOku(env, anahtar) {
+  const ham = await env.KV.get(anahtar);
+  if (ham === null || ham === undefined) return { ok: false, yok: true };
+  try { return { ok: true, deger: JSON.parse(ham) }; }
+  catch (e) { return { ok: false, yok: false }; }
+}
+
 function b64u(buf) {
   let s = '';
   const b = new Uint8Array(buf);
@@ -125,7 +138,12 @@ function b64u(buf) {
 /* VAPID JWT — ES256, WebCrypto. Özel anahtar yalnız env.VAPID_OZEL_JWK
    secret'ında yaşar; hiçbir yanıtta/logda görünmez. */
 async function vapidJwt(aud, env) {
-  const jwk = JSON.parse(env.VAPID_OZEL_JWK);
+  let jwk;
+  /* Secret bozuksa çökme değil tanımlı hata: pushGonder'ın catch'i bu mesajı
+     detay.istisna'ya taşır (/test-push'ta görünür). Anahtarın KENDİSİ mesaja
+     ASLA yazılmaz. */
+  try { jwk = JSON.parse(env.VAPID_OZEL_JWK); }
+  catch (e) { throw new Error('vapid-jwk-bozuk'); }
   const anahtar = await crypto.subtle.importKey('jwk', jwk,
     { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
   const enc = new TextEncoder();
@@ -162,8 +180,7 @@ async function pushGonder(abonelik, env, detay) {
   if (yanit.status === 404 || yanit.status === 410) return 'olu';
   if (yanit.status === 429) return 'geri-cekil';
   if (yanit.status >= 200 && yanit.status < 300) return 'tamam';
-  console.log('push beklenmedik durum: ' + yanit.status);
-  return 'hata';
+  return 'hata';   // durum kodu zaten detay.durum'da — ayrıca loglamak gürültü
 }
 
 function yerelSaat(dilim, an) {
@@ -299,9 +316,15 @@ export default {
     if (url.pathname === '/abone-durum' && request.method === 'GET') {
       const endpoint = url.searchParams.get('endpoint') || '';
       if (!endpoint.startsWith('https://')) return json({ hata: 'endpoint' }, 400);
-      const kayit = await env.KV.get('abone:' + await endpointHash(endpoint));
-      if (!kayit) return json({ kayitli: false });
-      const k = JSON.parse(kayit);
+      const dHash = await endpointHash(endpoint);
+      const kayit = await kvOku(env, 'abone:' + dHash);
+      if (kayit.yok) return json({ kayitli: false });
+      if (!kayit.ok) {
+        /* Log'a endpoint'in KENDİSİ değil hash'i yazılır (log hijyeni). */
+        console.warn('bozuk abone kaydi: ' + dHash);
+        return json({ hata: 'kayit-bozuk' }, 409);
+      }
+      const k = kayit.deger;
       /* v62: kullanıcıya görünür durum için olusturma + sonGonderim de döner.
          Hepsi kendi kaydının meta verisi; başka abonenin bilgisi sızmaz. */
       return json({ kayitli: true, saat: k.saat, dilim: k.dilim, vade: k.vade,
@@ -335,10 +358,15 @@ export default {
 
     if (url.pathname === '/abone-guncelle') {
       if (typeof govde.endpoint !== 'string') return json({ hata: 'endpoint' }, 400);
-      const anahtar = 'abone:' + await endpointHash(govde.endpoint);
-      const eski = await env.KV.get(anahtar);
-      if (!eski) return json({ hata: 'kayit-yok' }, 404);
-      const k = JSON.parse(eski);
+      const gHash = await endpointHash(govde.endpoint);
+      const anahtar = 'abone:' + gHash;
+      const eski = await kvOku(env, anahtar);
+      if (eski.yok) return json({ hata: 'kayit-yok' }, 404);
+      if (!eski.ok) {
+        console.warn('bozuk abone kaydi: ' + gHash);
+        return json({ hata: 'kayit-bozuk' }, 409);
+      }
+      const k = eski.deger;
       if (govde.saat !== undefined) {
         const saat = parseInt(govde.saat, 10);
         if (!(saat >= 0 && saat <= 23)) return json({ hata: 'saat' }, 400);
@@ -375,11 +403,16 @@ export default {
        hatırlatmayı tüketmesin). */
     if (url.pathname === '/test-push') {
       if (typeof govde.endpoint !== 'string') return json({ hata: 'endpoint' }, 400);
-      const anahtar = 'abone:' + await endpointHash(govde.endpoint);
-      const ham = await env.KV.get(anahtar);
-      if (!ham) return json({ hata: 'kayit-yok' }, 404);
+      const tHash = await endpointHash(govde.endpoint);
+      const anahtar = 'abone:' + tHash;
+      const ham = await kvOku(env, anahtar);
+      if (ham.yok) return json({ hata: 'kayit-yok' }, 404);
+      if (!ham.ok) {
+        console.warn('bozuk abone kaydi: ' + tHash);
+        return json({ hata: 'kayit-bozuk' }, 409);
+      }
       const detay = {};
-      const sonuc = await pushGonder(JSON.parse(ham).abonelik, env, detay);
+      const sonuc = await pushGonder(ham.deger.abonelik, env, detay);
       if (sonuc === 'olu') await env.KV.delete(anahtar);
       return json({ sonuc, durum: detay.durum, istisna: detay.istisna || null });
     }

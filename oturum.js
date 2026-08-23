@@ -15,7 +15,7 @@
     try{ return JSON.parse(localStorage.getItem(OTURUM_ANAHTAR)) || null; }catch(e){ return null; }
   }
   function oturumYaz(o){
-    try{ o ? localStorage.setItem(OTURUM_ANAHTAR, JSON.stringify(o)) : localStorage.removeItem(OTURUM_ANAHTAR); }catch(e){}
+    try{ o ? localStorage.setItem(OTURUM_ANAHTAR, JSON.stringify(o)) : localStorage.removeItem(OTURUM_ANAHTAR); }catch(e){ window._iz && window._iz('oturumYaz', e); }
   }
   function gunStr(ts){
     const d = new Date(ts);

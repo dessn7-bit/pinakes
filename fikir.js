@@ -13,11 +13,10 @@
     fikirBasligi: 'Fikir: '
   };
 
-  function kacir(s){
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
-      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
-    });
-  }
+  /* Yerel esc() KALDIRILDI: cekirdegin global esc()'i birebir ayni
+     donusumu yapiyor (ayni regex + ayni harita; "s == null ? '' : s" ile
+     "s ?? ''" esdeger). fikir.js index.html'deki cekirdek script'ten SONRA
+     yuklendigi icin esc() her zaman tanimli. */
   function bildir(m){ if(typeof toast === 'function') toast(m); }
   /* Etiket silme KARARI: onay yerine GERİ ALMA.
      Onay her silmede friksiyon yaratır (etiket düzenlemek sık yapılan iş);
@@ -125,7 +124,7 @@
       etiketler.forEach(function(e){
         var kitapSayi = Object.keys(say[e].kitaplar).length;
         parcalar.push('<button class="mini-chip' + (secili === e ? ' secili' : '') +
-          '" data-act="fikir-filtre" data-v="' + kacir(e) + '" style="flex:0 0 auto">#' + kacir(e) +
+          '" data-act="fikir-filtre" data-v="' + esc(e) + '" style="flex:0 0 auto">#' + esc(e) +
           ' <span style="opacity:.7">' + say[e].kayit + (kitapSayi > 1 ? '/' + kitapSayi + '\u25a0' : '') +
           '</span></button>');
       });
@@ -163,10 +162,10 @@
       alt.style.marginTop = '8px';
       alt.innerHTML = etiketSatiri(b.n, kim.kid || b.k.id) +
         '<div style="display:flex;gap:6px;margin-top:8px">' +
-          '<input class="fikir-giris" data-nid="' + kacir(kim.nid) + '" placeholder="' + T.fikirEkle +
+          '<input class="fikir-giris" data-nid="' + esc(kim.nid) + '" placeholder="' + T.fikirEkle +
             '" autocomplete="off" style="flex:1;font-size:.85rem;padding:8px 10px">' +
-          '<button class="mini-chip" data-act="fikir-ekle" data-nid="' + kacir(kim.nid) +
-            '" data-kid="' + kacir(kim.kid || b.k.id) + '">' + T.ekle + '</button>' +
+          '<button class="mini-chip" data-act="fikir-ekle" data-nid="' + esc(kim.nid) +
+            '" data-kid="' + esc(kim.kid || b.k.id) + '">' + T.ekle + '</button>' +
         '</div>';
       kart.appendChild(alt);
     });
@@ -175,9 +174,9 @@
     var et = n.fikir || [];
     if(!et.length) return '';
     return '<div style="display:flex;flex-wrap:wrap;gap:5px">' + et.map(function(e){
-      return '<span class="mini-chip" style="padding:3px 10px;font-size:.75rem">#' + kacir(e) +
-        ' <button data-act="fikir-sil" data-nid="' + kacir(n.id) + '" data-kid="' + kacir(kitapId || '') +
-        '" data-v="' + kacir(e) +
+      return '<span class="mini-chip" style="padding:3px 10px;font-size:.75rem">#' + esc(e) +
+        ' <button data-act="fikir-sil" data-nid="' + esc(n.id) + '" data-kid="' + esc(kitapId || '') +
+        '" data-v="' + esc(e) +
         '" style="color:var(--muted2);margin-left:2px">\u00d7</button></span>';
     }).join('') + '</div>';
   }
@@ -207,7 +206,7 @@
     var h = document.createElement('div');
     h.id = 'fikirBaslik';
     h.style.cssText = 'font-size:.85rem;color:var(--muted);margin:6px 0 2px';
-    h.innerHTML = '<b style="color:var(--brass)">' + T.fikirBasligi + '#' + kacir(secili) + '</b> \u2014 ' +
+    h.innerHTML = '<b style="color:var(--brass)">' + T.fikirBasligi + '#' + esc(secili) + '</b> \u2014 ' +
       gorunen + T.kayit + ', ' + kitapSayi + T.kitapta;
     /* v55: bulut artık #alYuvaFikir'in içinde — referans düğümün ebeveyni
        kap OLMAYABİLİR. Başlık bulutun KENDİ ebeveynine, hemen ardına girer;

@@ -377,7 +377,7 @@
               ' dolu (' + Math.round(t.quota / (1024 * 1024 * 1024) * 10) / 10 + ' GB sınır)';
           }
           kutu.textContent = metin;
-        }).catch(() => { kutu.textContent = metin; });
+        }).catch(() => { kutu.textContent = metin + ' · cihaz deposu: hesaplanamadı'; });
       }else kutu.textContent = metin;
     }).catch(() => { kutu.textContent = 'Fotoğraf deposu açılamadı'; });
   }

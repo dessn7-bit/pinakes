@@ -65,7 +65,7 @@
       tetik: tetikYukle(null), oneriGun: VARSAYILAN_ONERI_GUN, sonOzet: null }; }
   }
   function ayarKaydet(a){
-    try{ localStorage.setItem(AYAR_ANAHTAR, JSON.stringify(a)); }catch(e){}
+    try{ localStorage.setItem(AYAR_ANAHTAR, JSON.stringify(a)); }catch(e){ window._iz && window._iz('bildirimAyarKaydet', e); }
   }
 
   /* ---------- IndexedDB (kapak.js dbAc/islem deseninin kopyası) ---------- */
@@ -81,7 +81,7 @@
       istek.onsuccess = () => {
         const db = istek.result;
         db.onclose = () => { dbSoz = null; };
-        db.onversionchange = () => { try{ db.close(); }catch(e){} dbSoz = null; };
+        db.onversionchange = () => { try{ db.close(); }catch(e){ /* zaten kapalı — kasıtlı */ } dbSoz = null; };
         cozul(db);
       };
       istek.onerror = () => kir(istek.error || new Error('açılamadı'));
@@ -122,7 +122,7 @@
       (veri.kitaplar || []).forEach(k => (k.notlar || []).forEach(n => {
         if(n && n.tekrarDurum === 'aktif' && n.tekrarSonraki) adaylar.push(n);
       }));
-    }catch(e){}
+    }catch(e){ /* beklenmedik veri biçimi → boş aday listesi; sessiz geçiş kasıtlı */ }
     /* tekrar.js kuyruk sırasıyla aynı öncelik: vade, tarih, id */
     adaylar.sort((a, b) => a.tekrarSonraki.localeCompare(b.tekrarSonraki)
       || ((a.tarih || '').localeCompare(b.tarih || ''))
@@ -232,10 +232,10 @@
   }
   async function tazele(){
     const o = ozetHesapla();
-    try{ await ozetYazIdb(o); }catch(e){}
+    try{ await ozetYazIdb(o); }catch(e){ window._iz && window._iz('ozetYazIdb', e); }
     const a = ayarYukle();
     const ayna = aynaOlustur(o, a);
-    try{ await aynaYazIdb(ayna); }catch(e){}
+    try{ await aynaYazIdb(ayna); }catch(e){ window._iz && window._iz('aynaYazIdb', e); }
     ozetSenkronla(ayna);
     return o;
   }
@@ -258,7 +258,7 @@
           body: JSON.stringify(Object.assign({ endpoint: abonelik.endpoint }, ayna))
         });
         if(y.ok){ const g = ayarYukle(); g.sonOzet = damga; g.sonVade = ayna.vade; ayarKaydet(g); }
-      }catch(e){}
+      }catch(e){ window._iz && window._iz('ozetSenkronla', e); }
     }, 1200);
   }
 
@@ -318,7 +318,7 @@
          a.acik=false gördüğü için senkron etmezdi ve abone, ilk gün tetiksiz
          kalırdı (yalnız vade giderdi). */
       const ayna = aynaOlustur(o, Object.assign({}, a, { acik: true }));
-      try{ await ozetYazIdb(o); await aynaYazIdb(ayna); }catch(e){}
+      try{ await ozetYazIdb(o); await aynaYazIdb(ayna); }catch(e){ window._iz && window._iz('bildirimAcIdbYaz', e); }
       const y = await fetch(SUNUCU + '/abone', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(Object.assign({
@@ -348,10 +348,10 @@
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ endpoint: abonelik.endpoint })
           });
-        }catch(e){}
+        }catch(e){ window._iz && window._iz('aboneSilIstek', e); }
         await abonelik.unsubscribe();
       }
-    }catch(e){}
+    }catch(e){ window._iz && window._iz('bildirimKapat', e); }
     bildir('Hatırlatma kapatıldı');
     durumYaz();
   }
@@ -401,7 +401,7 @@
             body: JSON.stringify({ endpoint: abonelik.endpoint, saat: a.saat,
               dilim: Intl.DateTimeFormat().resolvedOptions().timeZone })
           });
-        }catch(e){}
+        }catch(e){ window._iz && window._iz('saatGuncelleIstek', e); }
       }
     });
   }

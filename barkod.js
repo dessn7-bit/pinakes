@@ -107,7 +107,7 @@
       if(typeof kapakOnizleCiz === 'function') kapakOnizleCiz();
     }
     // arama önerilerini sustur (kullanıcı yazmadı, biz doldurduk)
-    if(typeof sonAramaMetni !== 'undefined'){ try{ sonAramaMetni = k.ad; }catch(e){} }
+    if(typeof sonAramaMetni !== 'undefined'){ try{ sonAramaMetni = k.ad; }catch(e){ /* değişken salt-okunur olabilir — sessiz geçiş kasıtlı */ } }
     const dEl = document.getElementById('olDurum'), sEl = document.getElementById('olSonuc');
     if(sEl) sEl.innerHTML = '';
     if(dEl) dEl.textContent = 'ISBN ' + isbn + ' bulundu — kontrol edip kaydet.';
@@ -203,7 +203,7 @@
       const s = r.decode(bitmap);
       return s && s.getText ? s.getText() : null;
     }catch(e){ return null; }              // NotFoundException = bu karede barkod yok
-    finally{ try{ r.reset(); }catch(e){} }
+    finally{ try{ r.reset(); }catch(e){ /* okuyucu sıfırlanamadı — sessiz geçiş kasıtlı */ } }
   }
   function yedekVideoCoz(v, tuval){
     if(!v.videoWidth) return null;
@@ -223,7 +223,7 @@
       const yet = iz && iz.getCapabilities ? iz.getCapabilities() : {};
       if(yet.focusMode && yet.focusMode.includes('continuous'))
         await iz.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
-    }catch(e){}
+    }catch(e){ /* odak özelliği yok — sessiz geçiş kasıtlı */ }
   }
 
   /* ---------- kamera (tekil barkod penceresi) ---------- */
@@ -246,7 +246,7 @@
     }
     const v = document.getElementById('barkodVideo');
     v.srcObject = akis;
-    try{ await v.play(); }catch(e){}
+    try{ await v.play(); }catch(e){ /* otomatik oynatma engeli — sessiz geçiş kasıtlı */ }
     odaklan(akis);
     tarayici = await tarayiciKur();
     if(tarayici){

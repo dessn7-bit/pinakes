@@ -208,10 +208,10 @@
     catch(e){ return null; }
   }
   function kuyrukKaydet(k){
-    try{ localStorage.setItem(KUYRUK_ANAHTAR, JSON.stringify(k)); }catch(e){}
+    try{ localStorage.setItem(KUYRUK_ANAHTAR, JSON.stringify(k)); }catch(e){ window._iz && window._iz('zenginKuyrukKaydet', e); }
   }
   function kuyrukTemizle(){
-    try{ localStorage.removeItem(KUYRUK_ANAHTAR); }catch(e){}
+    try{ localStorage.removeItem(KUYRUK_ANAHTAR); }catch(e){ window._iz && window._iz('zenginKuyrukTemizle', e); }
   }
 
   /* ---------- eksik alan sayımı ---------- */
@@ -569,7 +569,7 @@
     catch(e){ return {}; }
   }
   function defterYaz(anahtar, d){
-    try{ localStorage.setItem(anahtar, JSON.stringify(d)); }catch(e){}
+    try{ localStorage.setItem(anahtar, JSON.stringify(d)); }catch(e){ window._iz && window._iz('zenginDefterYaz', e); }
   }
   function denemeDamgala(id){
     const d = defterOku(OTO_DENEME_ANAHTAR);
@@ -1034,7 +1034,7 @@
         const m = (y.m === null) ? window.__ozet.oku(k.id) : y.m;   // özet değişmiyorsa mevcut korunur
         let tamam = false;
         try{ tamam = await window.__ozet.kaydetHam(k.id, m, Date.now(), y.o); }
-        catch(e){}
+        catch(e){ window._iz && window._iz('zenginKaydetHam', e); }
         if(tamam){ if(y.m !== null) nOzet++; if(y.o !== undefined) nOnto++; }
         else olmadi++;
       }
@@ -1065,7 +1065,7 @@
      özeti zaten taşır; kütüphane değiştikçe yeniden uygulamak değerli (v67). */
   async function iceHazirYukle(cfg){
     let y = null;
-    try{ y = await fetch(cfg.hazirYol); }catch(e){}
+    try{ y = await fetch(cfg.hazirYol); }catch(e){ /* ağ hatası hemen altta ele alınıyor (!y dalı) — kasıtlı */ }
     if(!y || !y.ok){
       bildir('Hazır liste okunamadı — uygulamanın güncel sürümü ve bir kez internet gerekli');
       return;

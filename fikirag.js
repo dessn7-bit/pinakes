@@ -298,7 +298,7 @@
         try{
           window.__fikir.secilenYaz(el.dataset.v);
           window.__fikir.tazele();
-        }catch(err){}
+        }catch(err){ /* fikir.js API'si hazır değil — sessiz geçiş kasıtlı */ }
         setTimeout(ciz, 0);
         return;
       }

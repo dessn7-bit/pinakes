@@ -188,7 +188,7 @@
      bilinmeyen" sayılıp elenirdi. Bir kerelik yeniden sorgu (<=6 Google
      isteği) 24 saatlik yanlış görünüme yeğlenir; eski kova silinir. */
   const B_ONBELLEK = 'kk_kesfet_b_v2';
-  try{ localStorage.removeItem('kk_kesfet_b_v1'); }catch(e){}
+  try{ localStorage.removeItem('kk_kesfet_b_v1'); }catch(e){ /* eski önbellek kalabilir, zararsız — sessiz geçiş kasıtlı */ }
   /* TTL 24 saat: Google kotası günlük, yazar kataloğu günlük değişmez. Anahtar
      İMZA sorgu setinden (yazar+seri katla'lı) — kütüphane değişip sinyal seti
      değişirse önbellek kendiliğinden düşer. Cihaz-yerel, senkron DIŞI
@@ -625,7 +625,7 @@
       B.durum = 'hazir';
       B.acik = false;   // yeni havuz kısaltılmış başlar (M2)
       try{ localStorage.setItem(B_ONBELLEK,
-        JSON.stringify({ imza, t: Date.now(), adaylar })); }catch(e){}
+        JSON.stringify({ imza, t: Date.now(), adaylar })); }catch(e){ window._iz && window._iz('kesfetBOnbellekYaz', e); }
     }
     if(typeof durum === 'object' && durum.sekme === 'kesfet') ciz();
   }
@@ -921,7 +921,7 @@
       const defter = gizliAdDefteri();
       defter[bAnahtar(a)] = a.ad + (a.yazar ? ' — ' + a.yazar : '');
       localStorage.setItem(GIZLI_AD_ANAHTAR, JSON.stringify(defter));
-    }catch(e){}
+    }catch(e){ window._iz && window._iz('kesfetGizliDefter', e); }
     depoKaydet();
     if(typeof toast === 'function') toast('Bir daha önerilmeyecek — alttaki listeden geri alabilirsin');
     ciz();

@@ -25,7 +25,7 @@
   function ayarYukle(){ try{ return JSON.parse(localStorage.getItem(AYAR_ANAHTAR)) || null; }catch(e){ return null; } }
   function ayarKaydet(a){
     ayar = a;
-    try{ a ? localStorage.setItem(AYAR_ANAHTAR, JSON.stringify(a)) : localStorage.removeItem(AYAR_ANAHTAR); }catch(e){}
+    try{ a ? localStorage.setItem(AYAR_ANAHTAR, JSON.stringify(a)) : localStorage.removeItem(AYAR_ANAHTAR); }catch(e){ window._iz && window._iz('senkronAyarKaydet', e); }
   }
   function bildir(m){ if(typeof toast === 'function') toast(m); }
 
@@ -89,7 +89,7 @@
     }catch(e){ return { izler: {}, goc: true }; }
   }
   function anlikKaydet(izler){
-    try{ localStorage.setItem(ANLIK_ANAHTAR, JSON.stringify({ s: ANLIK_SURUM, p: izler })); }catch(e){}
+    try{ localStorage.setItem(ANLIK_ANAHTAR, JSON.stringify({ s: ANLIK_SURUM, p: izler })); }catch(e){ window._iz && window._iz('anlikKaydet', e); }
   }
   function kitapParmak(k){
     const kopya = { ...k }; delete kopya.g;
@@ -165,7 +165,7 @@
           body: JSON.stringify({ grant_type:'refresh_token', refresh_token: kimlik.refreshToken }) });
         const j = await r.json();
         if(j.id_token){ kimlik = { idToken:j.id_token, refreshToken:j.refresh_token, sonAlim:simdi }; return kimlik.idToken; }
-      }catch(e){}
+      }catch(e){ window._iz && window._iz('tokenYenile', e); }
     }
     const r = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=' + SENKRON_KEY, {
       method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ returnSecureToken:true }) });
@@ -671,7 +671,7 @@
         // kaydet: depo yazımı kota yüzünden düşerse parmak izi de kalıcılaşmaz
         // (M4b) — aksi halde bayat depo taze iz tabanıyla "değişmemiş" sayılırdı.
         let izler = null;
-        try{ izler = damgala(false); }catch(e){}
+        try{ izler = damgala(false); }catch(e){ window._iz && window._iz('depoDamgala', e); }
         const s = asil.apply(this, arguments);
         if(s !== false && izler){ anlikKaydet(izler); bekleyenIzler = null; }
         else if(izler) bekleyenIzler = izler;   // bellek tabanı: damga enflasyonu önlenir
