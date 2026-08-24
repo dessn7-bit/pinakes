@@ -281,23 +281,25 @@ export default {
       /* v63: abone sayımının yanında CANLI tetik hazırlığı. "Cron koşuyor ama
          gönderilen 0" durumunda hangi tetiğin dolu/boş olduğunu ölçmek için —
          yalnız SAYI döner, kimin hangi tetiği olduğu değil. */
-      let aboneSayisi = 0, cursor;
+      let aboneSayisi = 0, bozukKayit = 0, cursor;
       const hazir = { tempo: 0, oneri: 0, okuma: 0, alinti: 0 };
       const an = new Date();
       do {
         const liste = await env.KV.list({ prefix: 'abone:', cursor });
         aboneSayisi += liste.keys.length;
         for (const a of liste.keys) {
+          const ham = await env.KV.get(a.name);
+          if (ham === null) continue;      // list ile get arasında silinmiş
           try {
-            const k = JSON.parse(await env.KV.get(a.name));
+            const k = JSON.parse(ham);
             const gun = yerelGun(k.dilim, an);
             for (const t of ONCELIK) if (tetikHazirMi(t, k, gun, an)) hazir[t]++;
-          } catch (e) { /* bozuk kayıt sayımı düşürmez */ }
+          } catch (e) { bozukKayit++; }    // bozuk kayıt sayımı düşürmez; v87: SAYILIR (cron silmiyor, görünürlük burası)
         }
         cursor = liste.list_complete ? null : liste.cursor;
       } while (cursor);
       const simdi = Date.now();
-      return json({
+      const yanit = {
         durum: 'calisiyor',
         aboneSayisi,
         hazirTetikler: hazir,       // v63: su an hangi tetik kac abonede dolu
@@ -306,7 +308,11 @@ export default {
         sonCron: son,               // null = cron HİÇ koşmamış (ya da tampon boş)
         sonCronDkOnce: son ? Math.round((simdi - Date.parse(son.zaman)) / 60000) : null,
         turSayisi: gecmis.length
-      });
+      };
+      /* v87: cron bozuk kaydı artık silmediği için tek görünürlük noktası.
+         Sıfırken alan HİÇ yazılmaz — gürültü olmasın. Yine yalnız SAYI döner. */
+      if (bozukKayit) yanit.bozukKayit = bozukKayit;
+      return json(yanit);
     }
 
     if (url.pathname === '/cron-gecmis') {
@@ -467,8 +473,14 @@ async function gonderTuru(env, an) {
         const ham = await env.KV.get(anahtar.name);
         if (!ham) continue;
         let kayit;
+        /* v87 KARAR: bozuk (JSON ayrışmayan) kayıt cron'da da SİLİNMEZ —
+           uçlarla (v85, 409 'kayit-bozuk') aynı davranış. Silinen kayıt geri
+           gelmez; duran kayıt /saglik'taki bozukKayit sayısında görünür ve
+           elle incelenebilir. Log da YOK: sayaç yeter, saatlik cron'da satır
+           basmak gürültü olur. 404/410 ölü-abonelik silmesi AYRI yol — o
+           gerçekten ölü aboneliktir, silinmesi doğrudur (aşağıda, DEĞİŞMEDİ). */
         try { kayit = JSON.parse(ham); }
-        catch (e) { o.bozukKayit++; await env.KV.delete(anahtar.name); continue; }
+        catch (e) { o.bozukKayit++; continue; }
         let saat, gun;
         try { saat = yerelSaat(kayit.dilim, an); gun = yerelGun(kayit.dilim, an); }
         catch (e) { o.bozukKayit++; continue; }

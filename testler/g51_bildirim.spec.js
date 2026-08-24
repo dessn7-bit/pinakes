@@ -523,6 +523,57 @@ test.describe('G51 worker uçları', () => {
       .toBe(oku(path.join(KOK, 'worker-bildirim', 'worker.js')));
   });
 
+  /* ===== v87 BOZUK KAYIT ÇELİŞKİSİ =====
+     Uçlar (v85 kararı) bozuk KV kaydını KORUYUP 409 dönerken cron aynı kaydı
+     SİLİYORDU (v62 kalıntısı — karar verilirken gözden kaçtı). Karar: cron da
+     silmez. Silinen kayıt geri gelmez; duran kayıt /saglik'taki bozukKayit
+     sayısında görünür. 404/410 ölü-abonelik silmesi AYRI ve DOĞRU yol —
+     yukarıdaki "ölü abonelik SİLİNİR" mutasyon-kilidi vakası onu korur.
+     (Mutasyon 6: cron catch'ine delete geri eklenir → "SİLİNMEZ" vakası
+      kırmızı. Mutasyon 7: /saglik bozukKayit'i koşulsuz yazar → "alan hiç
+      yok" vakası kırmızı.) */
+
+  test('v87 cron: bozuk KV kaydı SİLİNMEZ, döngü sürer, sağlam abone bildirimini ALIR', async () => {
+    const w = await workerYukle();
+    const env = ortamKur();
+    const bozukAnahtar = 'abone:' + 'b'.repeat(64);
+    env.KV.depo.set(bozukAnahtar, 'bozuk{json');   // sağlam kayıttan ÖNCE listelenir
+    await w.fetch(istekYap('/abone', gecerliGovde()), env);
+    const istekler = pushServisi(201);
+    const o = await w.gonderTuru(env, new Date('2026-08-12T09:30:00Z'));
+    expect(env.KV.depo.has(bozukAnahtar)).toBe(true);          // kayıt DURUYOR
+    expect(env.KV.depo.get(bozukAnahtar)).toBe('bozuk{json');  // içeriğe de dokunulmadı
+    expect(o.bozukKayit).toBe(1);
+    expect(o.gonderilen).toBe(1);              // döngü bozuk kayıtta durmadı
+    expect(istekler.length).toBe(1);
+    expect(istekler[0].url).toBe(ABONELIK.endpoint);
+    // ikinci tur (ertesi gün): kayıt hâlâ duruyor, yine sayılıyor — kalıcılık kanıtı
+    const o2 = await w.gonderTuru(env, new Date('2026-08-13T09:30:00Z'));
+    expect(env.KV.depo.has(bozukAnahtar)).toBe(true);
+    expect(o2.bozukKayit).toBe(1);
+    expect(o2.gonderilen).toBe(1);
+  });
+
+  test('v87 /saglik: bozukKayit alanı doğru sayıyı gösterir; sağlam sayım etkilenmez', async () => {
+    const w = await workerYukle();
+    const env = ortamKur();
+    await w.fetch(istekYap('/abone', gecerliGovde()), env);    // vade geçmiş → alinti hazır
+    env.KV.depo.set('abone:' + 'c'.repeat(64), 'bozuk{json');
+    env.KV.depo.set('abone:' + 'e'.repeat(64), '{kirik');
+    const d = await (await w.fetch(istekYap('/saglik'), env)).json();
+    expect(d.bozukKayit).toBe(2);
+    expect(d.aboneSayisi).toBe(3);             // sayım listelenen anahtarı sayar (v62 davranışı korundu)
+    expect(d.hazirTetikler.alinti).toBe(1);    // sağlam kaydın tetik sayımı bozuktan etkilenmedi
+  });
+
+  test('v87 /saglik: bozuk kayıt YOKKEN bozukKayit alanı HİÇ yazılmaz', async () => {
+    const w = await workerYukle();
+    const env = ortamKur();
+    await w.fetch(istekYap('/abone', gecerliGovde()), env);
+    const d = await (await w.fetch(istekYap('/saglik'), env)).json();
+    expect('bozukKayit' in d).toBe(false);
+  });
+
   test('worker kaynak kopyaları özdeş (canlı deploy ↔ repo arşivi, CRLF hariç)', async () => {
     const duz = s => s.replace(/\r\n/g, '\n');
     const repo = duz(fs.readFileSync(path.join(KOK, 'worker-bildirim', 'worker.js'), 'utf8'));
