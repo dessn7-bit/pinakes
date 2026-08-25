@@ -88,11 +88,14 @@ test.describe('G51 worker uçları', () => {
     expect(kayit.dilim).toBe('UTC');
     expect(kayit.vade).toBe('2026-08-11');
     expect(kayit.abonelik.endpoint).toBe(ABONELIK.endpoint);
-    /* GİZLİLİK: kayıtta YALNIZ beklenen alanlar. v63'te dört tetik alanı
-       eklendi — hepsi GÜN/BAYRAK; metin taşıyabilecek alan yok. Küme TAM
-       sınanıyor ki kazara bir alan sızarsa vaka kırmızıya dönsün. */
-    expect(Object.keys(kayit).sort()).toEqual(['abonelik', 'dilim', 'okumaSonGun',
-      'olusturma', 'oneriGun', 'oneriVar', 'saat', 'tempoGeride', 'vade']);
+    /* GİZLİLİK: kayıtta YALNIZ beklenen alanlar. v63'te dört, v88'de sekiz
+       tetik alanı eklendi — hepsi GÜN/BAYRAK; metin taşıyabilecek alan yok.
+       Küme TAM sınanıyor ki kazara bir alan sızarsa vaka kırmızıya dönsün.
+       (v88 bilinçli güncelleme: yeni alanlar kümeye eklendi.) */
+    expect(Object.keys(kayit).sort()).toEqual(['abonelik', 'bagVar', 'ciltVar',
+      'dilim', 'gecenYilGun', 'gunlukVar', 'hedefGeride', 'hedefGun',
+      'okumaSonGun', 'olusturma', 'oneriGun', 'oneriVar', 'parcaVar', 'saat',
+      'tempoGeride', 'vade', 'yarimSonGun']);
   });
 
   test('abone: geçersiz gövdeler 4xx (bozuk json, eksik anahtar, saat, dilim, vade)', async () => {
@@ -507,10 +510,14 @@ test.describe('G51 worker uçları', () => {
       vade: '2026-08-01', okumaSonGun: null, oneriGun: null, oneriVar: false, tempoGeride: true
     })), env);
     const d = await (await w.fetch(istekYap('/saglik'), env)).json();
-    expect(d.oncelik).toEqual(['tempo', 'oneri', 'okuma', 'alinti']);
+    /* v88 bilinçli güncelleme: öncelik dizisi 4 → 11 tetik. */
+    expect(d.oncelik).toEqual(['gecenYil', 'tempo', 'bag', 'cilt', 'yarim',
+      'oneri', 'okuma', 'hedef', 'alinti', 'parca', 'gunluk']);
     expect(d.hazirTetikler.alinti).toBe(1);
     expect(d.hazirTetikler.okuma).toBe(0);
     expect(d.hazirTetikler.oneri).toBe(0);
+    expect(d.hazirTetikler.parca).toBe(0);   // v88 sayaçları da dönüyor
+    expect(d.hazirTetikler.gunluk).toBe(0);
   });
 
   test('v63 ONCELIK dizisi sw.js ve worker.js\'de BİREBİR aynı (statik kilit)', async () => {
@@ -521,6 +528,180 @@ test.describe('G51 worker uçları', () => {
     };
     expect(oku(path.join(KOK, 'sw.js')))
       .toBe(oku(path.join(KOK, 'worker-bildirim', 'worker.js')));
+  });
+
+  /* ===== v88 YEDİ YENİ TETİK — sunucu kapıları =====
+     Hepsi saf fonksiyon (kayıt alanları + tarih); durum damgası YOK.
+     (Mutasyon C: yarim merdiveni kaldırılır → "10'un katlarında" kırmızı.
+      Mutasyon D: parca gün-nöbeti kaldırılır → "çift günde günlük" kırmızı.) */
+  const EPOCH_GUN = g => Math.floor(Date.parse(g + 'T00:00:00Z') / 86400000);
+
+  test('v88 gunluk: okunuyor kitap bayrağıyla gönderir; bayrak yokken sessiz', async () => {
+    const w = await workerYukle();
+    const env = ortamKur();
+    await w.fetch(istekYap('/abone', tetikGovde({ vade: null, gunlukVar: true })), env);
+    const istekler = pushServisi(201);
+    await w.gonderTuru(env, AN('2026-09-02'));
+    expect(istekler.length).toBe(1);
+    const env2 = ortamKur();
+    await w.fetch(istekYap('/abone', tetikGovde({ vade: null, gunlukVar: false })), env2);
+    pushServisi(201);
+    expect((await w.gonderTuru(env2, AN('2026-09-02'))).gonderilen).toBe(0);
+  });
+
+  test('v88 yarim MERDİVENİ: 10 ve 20. günde çalar, 5 ve 15. günde çalmaz', async () => {
+    const w = await workerYukle();
+    const env = ortamKur();
+    await w.fetch(istekYap('/abone', tetikGovde({ vade: null, yarimSonGun: '2026-08-01' })), env);
+    const calan = [];
+    for (const gun of ['2026-08-06', '2026-08-11', '2026-08-16', '2026-08-21']) {
+      const e2 = ortamKur(sahteKV(Object.fromEntries(env.KV.depo)));
+      pushServisi(201);
+      const ozet = await w.gonderTuru(e2, AN(gun));
+      if (ozet.gonderilen) calan.push(gun);
+    }
+    expect(calan).toEqual(['2026-08-11', '2026-08-21']);   // 10 ve 20 gün
+  });
+
+  test('v88 hedef: bayrak yalnız KENDİ gününde çalar — bayat bayrak ertesi güne taşmaz', async () => {
+    const w = await workerYukle();
+    const env = ortamKur();
+    await w.fetch(istekYap('/abone', tetikGovde({ vade: null, hedefGeride: true, hedefGun: '2026-09-02' })), env);
+    const istekler = pushServisi(201);
+    const o = await w.gonderTuru(env, AN('2026-09-03'));   // bayrak DÜNÜN — gönderilmez
+    expect(o.gonderilen).toBe(0);
+    await w.gonderTuru(env, AN('2026-09-02'));             // bayrağın günü — gönderilir
+    expect(istekler.length).toBe(1);
+    expect((await w.fetch(istekYap('/saglik'), env)).status).toBe(200);
+  });
+
+  test('v88 gecenYil: yalnız yıldönümü gününde çalar', async () => {
+    const w = await workerYukle();
+    const env = ortamKur();
+    await w.fetch(istekYap('/abone', tetikGovde({ vade: null, gecenYilGun: '2026-09-05' })), env);
+    const istekler = pushServisi(201);
+    await w.gonderTuru(env, AN('2026-09-04'));
+    expect(istekler.length).toBe(0);
+    const o = await w.gonderTuru(env, AN('2026-09-05'));
+    expect(istekler.length).toBe(1);
+    expect(o.secimGecenYil).toBe(1);
+  });
+
+  test('v88 parca NÖBETİ: tek günlerde parça, çift günlerde günlük; okunuyor kitap yoksa her gün parça', async () => {
+    const w = await workerYukle();
+    const tek = EPOCH_GUN('2026-09-02') % 2 === 1 ? '2026-09-02' : '2026-09-03';
+    const cift = EPOCH_GUN('2026-09-02') % 2 === 0 ? '2026-09-02' : '2026-09-03';
+    const env = ortamKur();
+    await w.fetch(istekYap('/abone', tetikGovde({ vade: null, parcaVar: true, gunlukVar: true })), env);
+    pushServisi(201);
+    const oTek = await w.gonderTuru(env, AN(tek));
+    expect(oTek.secimParca).toBe(1);
+    expect(oTek.secimGunluk).toBe(0);
+    const env2 = ortamKur();
+    await w.fetch(istekYap('/abone', tetikGovde({ vade: null, parcaVar: true, gunlukVar: true })), env2);
+    pushServisi(201);
+    const oCift = await w.gonderTuru(env2, AN(cift));
+    expect(oCift.secimGunluk).toBe(1);
+    expect(oCift.secimParca).toBe(0);
+    // okunuyor kitap yok (gunlukVar false) → çift gün de parçanın
+    const env3 = ortamKur();
+    await w.fetch(istekYap('/abone', tetikGovde({ vade: null, parcaVar: true, gunlukVar: false })), env3);
+    pushServisi(201);
+    expect((await w.gonderTuru(env3, AN(cift))).secimParca).toBe(1);
+  });
+
+  test('v88 bag ayın 8\'i, cilt ayın 15\'i — başka gün sessiz (aylık yuva)', async () => {
+    const w = await workerYukle();
+    const env = ortamKur();
+    await w.fetch(istekYap('/abone', tetikGovde({ vade: null, bagVar: true, ciltVar: true })), env);
+    pushServisi(201);
+    expect((await w.gonderTuru(env, AN('2026-09-04'))).gonderilen).toBe(0);
+    const e8 = ortamKur(sahteKV(Object.fromEntries(env.KV.depo)));
+    pushServisi(201);
+    expect((await w.gonderTuru(e8, AN('2026-09-08'))).secimBag).toBe(1);
+    const e15 = ortamKur(sahteKV(Object.fromEntries(env.KV.depo)));
+    pushServisi(201);
+    expect((await w.gonderTuru(e15, AN('2026-09-15'))).secimCilt).toBe(1);
+  });
+
+  test('v88 ÇAKIŞMA: gecenYil+tempo+gunluk aynı gün hazır → günde 1, öncelik gecenYil', async () => {
+    const w = await workerYukle();
+    const env = ortamKur();
+    await w.fetch(istekYap('/abone', tetikGovde({
+      vade: null, gecenYilGun: '2026-09-01', tempoGeride: true, gunlukVar: true
+    })), env);
+    const istekler = pushServisi(201);
+    const o = await w.gonderTuru(env, AN('2026-09-01'));   // ayın 1'i + yıldönümü
+    expect(istekler.length).toBe(1);
+    expect(o.secimGecenYil).toBe(1);
+    expect(o.secimTempo).toBe(0);
+    expect(o.secimGunluk).toBe(0);
+  });
+
+  test('v88 YARIM ile OKUMA aynı gün hazır: İKİSİ BİRDEN GİTMEZ, yarim kazanır', async () => {
+    const w = await workerYukle();
+    const env = ortamKur();
+    // 2026-08-21: okumaSonGun 14 gün önce (7'nin katı), yarimSonGun 10 gün önce
+    await w.fetch(istekYap('/abone', tetikGovde({
+      vade: null, okumaSonGun: '2026-08-07', yarimSonGun: '2026-08-11'
+    })), env);
+    const istekler = pushServisi(201);
+    const o = await w.gonderTuru(env, AN('2026-08-21'));
+    expect(istekler.length).toBe(1);          // tek bildirim
+    expect(o.secimYarim).toBe(1);
+    expect(o.secimOkuma).toBe(0);
+  });
+
+  test('v88 GİZLİLİK: yeni tetik alanları da metin/yanlış tip KABUL ETMEZ', async () => {
+    const w = await workerYukle();
+    const env = ortamKur();
+    const kotu = [
+      { gunlukVar: 'evet' }, { yarimSonGun: 'Kürk Mantolu Madonna' },
+      { hedefGeride: 1 }, { hedefGun: '2.9.2026' }, { gecenYilGun: 123 },
+      { parcaVar: 'var' }, { bagVar: 0 }, { ciltVar: 'yok' }
+    ];
+    for (const ek of kotu) {
+      const y = await w.fetch(istekYap('/abone', tetikGovde(Object.assign({ vade: null }, ek))), env);
+      expect(y.status, JSON.stringify(ek)).toBe(400);
+    }
+    expect([...env.KV.depo.keys()].filter(k => k.startsWith('abone:'))).toEqual([]);
+  });
+
+  test('v88 AYNA TUTARLILIĞI: worker tetikHazirMi ile sw swTetikHazir aynı girdide aynı sonucu verir', async () => {
+    const w = await workerYukle();
+    /* sw.js'in swTetikHazir'ı vm bağlamından çekilir (üst düzey bildirim). */
+    const swCtx = swPushKur(undefined).ctx;
+    const swHazir = swCtx.swTetikHazir;
+    expect(typeof swHazir).toBe('function');
+    expect(typeof w.tetikHazirMi).toBe('function');
+    const girdiler = [
+      { vade: '2026-08-01' }, { vade: null },
+      { okumaSonGun: '2026-08-14' }, { okumaSonGun: '2026-08-10' },
+      { oneriVar: true, oneriGun: 5 }, { oneriVar: true, oneriGun: 2 },
+      { tempoGeride: true }, { tempoGeride: false },
+      { gunlukVar: true }, { gunlukVar: false },
+      { yarimSonGun: '2026-08-11' }, { yarimSonGun: '2026-08-13' },
+      { hedefGeride: true, hedefGun: '2026-08-21' }, { hedefGeride: true, hedefGun: '2026-08-20' },
+      { gecenYilGun: '2026-08-21' }, { gecenYilGun: '2026-08-22' },
+      { parcaVar: true, gunlukVar: true }, { parcaVar: true, gunlukVar: false },
+      { bagVar: true }, { ciltVar: true },
+      { vade: '2026-08-21', okumaSonGun: '2026-08-14', oneriVar: true, oneriGun: 5,
+        tempoGeride: true, gunlukVar: true, yarimSonGun: '2026-08-11',
+        hedefGeride: true, hedefGun: '2026-08-21', gecenYilGun: '2026-08-21',
+        parcaVar: true, bagVar: true, ciltVar: true }
+    ];
+    /* 2026-08-21 Cuma(5); UTC diliminde iki taraf aynı günü görür. */
+    const gunler = ['2026-08-01', '2026-08-08', '2026-08-15', '2026-08-21', '2026-09-01'];
+    for (const girdi of girdiler) {
+      const kayit = Object.assign({ dilim: 'UTC' }, girdi);
+      for (const gun of gunler) {
+        for (const t of w.ONCELIK) {
+          expect(swHazir(t, kayit, gun),
+            t + ' @ ' + gun + ' ' + JSON.stringify(girdi))
+            .toBe(w.tetikHazirMi(t, kayit, gun, new Date(gun + 'T09:30:00Z')));
+        }
+      }
+    }
   });
 
   /* ===== v87 BOZUK KAYIT ÇELİŞKİSİ =====
@@ -583,24 +764,34 @@ test.describe('G51 worker uçları', () => {
 });
 
 /* ================= sw.js push / notificationclick (vm) ================= */
-/* v63: iki anahtar — 'guncel' (metin üretimi) ve 'ayna' (tetik seçimi). */
-function sahteIdb(kayit, ayna) {
+/* v63: iki anahtar — 'guncel' (metin üretimi) ve 'ayna' (tetik seçimi).
+   v88: üçüncü anahtar 'parcaGecmis' (gösterilen parçalar) + PUT desteği —
+   SW artık gösterim geçmişini yazıyor; yazımlar `yazilan` dizisinde birikir. */
+function sahteIdb(kayit, ayna, gecmis, yazilan) {
   return {
     open() {
       const istek = {};
       setTimeout(() => {
         istek.result = {
           transaction() {
-            return { objectStore() {
-              return { get(k) {
+            const tx = {};
+            tx.objectStore = () => ({
+              get(k) {
                 const g = {};
                 setTimeout(() => {
-                  g.result = (k === 'guncel') ? kayit : (k === 'ayna' ? ayna : undefined);
+                  g.result = (k === 'guncel') ? kayit
+                    : (k === 'ayna' ? ayna : (k === 'parcaGecmis' ? gecmis : undefined));
                   if (g.onsuccess) g.onsuccess();
                 }, 0);
                 return g;
-              } };
-            } };
+              },
+              put(deger, k) {
+                if (yazilan) yazilan.push({ k, deger });
+                setTimeout(() => { if (tx.oncomplete) tx.oncomplete(); }, 0);
+                return {};
+              }
+            });
+            return tx;
           },
           close() {}, createObjectStore() {}
         };
@@ -616,6 +807,7 @@ function swPushKur(ozet, ayar) {
   const bildirimler = [];
   const acilan = [];
   const mesajlar = [];
+  const idbYazilan = [];
   const istemciler = (a.istemciler || []).map(u => ({
     url: u, odaklandi: false,
     focus() { this.odaklandi = true; return Promise.resolve(this); },
@@ -636,7 +828,7 @@ function swPushKur(ozet, ayar) {
     caches: { open: async () => ({ put: async () => {}, match: async () => undefined, addAll: async () => {} }),
       keys: async () => [], delete: async () => {}, match: async () => undefined },
     fetch: async () => ({ clone: () => ({}) }),
-    indexedDB: sahteIdb(ozet, a.ayna),
+    indexedDB: sahteIdb(ozet, a.ayna, a.gecmis, idbYazilan),
     Response: class { constructor(g, o) { this.govde = g; Object.assign(this, o || {}); } },
     /* v63: `bugun` verilirse argümansız `new Date()` o güne sabitlenir —
        merdiven/haftagünü/ayın-günü kapıları deterministik sınanabilsin.
@@ -650,7 +842,7 @@ function swPushKur(ozet, ayar) {
   };
   vm.createContext(ctx);
   vm.runInContext(SW_KAYNAK, ctx);
-  return { dinleyici, bildirimler, acilan, mesajlar, istemciler };
+  return { dinleyici, bildirimler, acilan, mesajlar, istemciler, idbYazilan, ctx };
 }
 async function olayGonder(kurulum, tur, ek) {
   const bekleyen = [];
@@ -781,6 +973,119 @@ test.describe('G51 service worker push', () => {
     const k = swPushKur(undefined, { istemciler: [] });
     await olayGonder(k, 'notificationclick', { notification: { close: () => {} } });
     expect(k.acilan).toEqual(['./index.html?sekme=alinti']);
+  });
+
+  /* ===== v88 SW: yeni tetik metinleri + parça geçmişi ===== */
+  const OZET88 = {
+    vadeler: [], ornekMetin: null, guncelleme: 1,
+    gunluk: { id: 'g1', ad: 'Kürk Mantolu Madonna', sayfa: 143, toplam: 208 },
+    yarim: { id: 'y1', ad: 'Ulysses', sayfa: 87, sonGun: '2026-08-11' },
+    hedef: { hedef: 20, okunan: 5, gun: '2026-08-21', geride: true },
+    gecenYil: { gun: '2026-08-21', yil: 2025, ad: 'Simyacı', id: 'gy1' },
+    bag: { kavram: 'yabancılaşma', k1: 'Dönüşüm', k2: 'Yabancı' },
+    cilt: { seri: 'Vakıf', gosterilen: [2, 5, 7], kalan: 4 },
+    parca: { havuz: [
+      { k: 'p1', ad: '1984', kay: 'o', i: 3, metin: 'Parti geçmişi sürekli yeniden yazar; amaç yalnız yalan söylemek değil, geçmişi gerçekten değiştirmektir.' },
+      { k: 'p2', ad: 'Dune', kay: 'm', i: 5, metin: 'Korku zihin öldürücüdür; küçük ölüm getiren tam yok oluştur, korkumun üzerinden geçeceğim.' }
+    ] }
+  };
+  test('v88 SW gunluk metni: kitap adı + sayfa/toplam; hedef KİTAP DETAYI', async () => {
+    const k = swPushKur(OZET88, { ayna: { gunlukVar: true }, bugun: '2026-08-20' });
+    await olayGonder(k, 'push');
+    expect(k.bildirimler.length).toBe(1);
+    expect(k.bildirimler[0].baslik).toBe('Kürk Mantolu Madonna');
+    expect(k.bildirimler[0].secenek.body).toContain('143/208. sayfadasın');
+    expect(k.bildirimler[0].secenek.data.hedef).toBe('./index.html?kitap=g1');
+  });
+  test('v88 SW yarim metni: N gündür X. sayfada; hedef KİTAP DETAYI', async () => {
+    const k = swPushKur(OZET88, { ayna: { yarimSonGun: '2026-08-11' }, bugun: '2026-08-21' });
+    await olayGonder(k, 'push');
+    expect(k.bildirimler[0].baslik).toBe('Ulysses');
+    expect(k.bildirimler[0].secenek.body).toContain('10 gündür 87. sayfadasın');
+    expect(k.bildirimler[0].secenek.tag).toBe('kitaplik-yarim');
+    expect(k.bildirimler[0].secenek.data.hedef).toBe('./index.html?kitap=y1');
+  });
+  test('v88 SW hedef metni: bugün N sayfa / hedef M; özet BAŞKA güne aitse sayı uydurulmaz', async () => {
+    const k = swPushKur(OZET88, { ayna: { hedefGeride: true, hedefGun: '2026-08-21' }, bugun: '2026-08-21' });
+    await olayGonder(k, 'push');
+    expect(k.bildirimler[0].secenek.body).toBe('Bugün 5 sayfa okudun, hedefin 20.');
+    expect(k.bildirimler[0].secenek.data.hedef).toBe('./index.html?sekme=ist');
+    // bayat özet (dünkü hedef bloğu) → yumuşak metin
+    const bayat = swPushKur(Object.assign({}, OZET88, { hedef: { hedef: 20, okunan: 5, gun: '2026-08-20', geride: true } }),
+      { ayna: { hedefGeride: true, hedefGun: '2026-08-21' }, bugun: '2026-08-21' });
+    await olayGonder(bayat, 'push');
+    expect(bayat.bildirimler[0].secenek.body).not.toContain('5 sayfa');
+  });
+  test('v88 SW gecenYil metni: geçen yıl / eski yıl ayrımı; hedef KİTAP DETAYI', async () => {
+    const k = swPushKur(OZET88, { ayna: { gecenYilGun: '2026-08-21' }, bugun: '2026-08-21' });
+    await olayGonder(k, 'push');
+    expect(k.bildirimler[0].baslik).toBe('Geçen yıl bugün');
+    expect(k.bildirimler[0].secenek.body).toContain('Simyacı');
+    expect(k.bildirimler[0].secenek.data.hedef).toBe('./index.html?kitap=gy1');
+    const eski = swPushKur(Object.assign({}, OZET88, { gecenYil: { gun: '2026-08-21', yil: 2023, ad: 'Simyacı', id: 'gy1' } }),
+      { ayna: { gecenYilGun: '2026-08-21' }, bugun: '2026-08-21' });
+    await olayGonder(eski, 'push');
+    expect(eski.bildirimler[0].baslik).toBe('2023 yılında bugün');
+  });
+  test('v88 SW bag metni: kavram + iki kitap; hedef ALINTILAR (fikir ağı)', async () => {
+    const k = swPushKur(OZET88, { ayna: { bagVar: true }, bugun: '2026-08-08' });
+    await olayGonder(k, 'push');
+    expect(k.bildirimler[0].secenek.body).toContain('yabancılaşma');
+    expect(k.bildirimler[0].secenek.body).toContain('Dönüşüm');
+    expect(k.bildirimler[0].secenek.body).toContain('Yabancı');
+    expect(k.bildirimler[0].secenek.data.hedef).toBe('./index.html?sekme=alinti');
+  });
+  test('v88 SW cilt metni: TAVANLI liste + "ve N cilt daha"; hedef SERİ RAFI', async () => {
+    const k = swPushKur(OZET88, { ayna: { ciltVar: true }, bugun: '2026-08-15' });
+    await olayGonder(k, 'push');
+    expect(k.bildirimler[0].baslik).toBe('Vakıf serisi');
+    expect(k.bildirimler[0].secenek.body).toBe('2 ve 5 ve 7. ciltleri eksik (ve 4 cilt daha).');
+    expect(k.bildirimler[0].secenek.data.hedef).toBe('./index.html?seri=Vak%C4%B1f');
+  });
+  test('v88 SW parça: geçmişteki parça ATLANIR, gösterilen parça geçmişe YAZILIR', async () => {
+    const tekGun = (Math.floor(Date.parse('2026-08-21T00:00:00Z') / 86400000) % 2 === 1)
+      ? '2026-08-21' : '2026-08-22';
+    const k = swPushKur(OZET88, { ayna: { parcaVar: true, gunlukVar: false }, bugun: tekGun,
+      gecmis: [{ a: 'p1:o:3', g: tekGun }] });   // ilk parça bugün zaten gösterilmiş
+    await olayGonder(k, 'push');
+    expect(k.bildirimler.length).toBe(1);
+    expect(k.bildirimler[0].baslik).toBe('Dune');           // ikinci parçaya düştü
+    expect(k.bildirimler[0].secenek.body).toContain('Korku zihin öldürücüdür');
+    expect(k.bildirimler[0].secenek.data.hedef).toBe('./index.html?kitap=p2');
+    expect(k.idbYazilan.length).toBe(1);                     // geçmiş yazıldı
+    expect(k.idbYazilan[0].k).toBe('parcaGecmis');
+    const anahtarlar = k.idbYazilan[0].deger.map(g => g.a);
+    expect(anahtarlar).toContain('p1:o:3');                  // eski kayıt korunur
+    expect(anahtarlar).toContain('p2:m:5');                  // yeni gösterim eklendi
+  });
+  test('v88 SW parça 90 GÜN: penceresi dolan parça yeniden seçilebilir', async () => {
+    const bugun = '2026-08-21';
+    const gun91 = '2026-05-22';   // 91 gün önce
+    const k = swPushKur(OZET88, { ayna: { parcaVar: true, gunlukVar: false }, bugun,
+      gecmis: [{ a: 'p1:o:3', g: gun91 }] });
+    await olayGonder(k, 'push');
+    expect(k.bildirimler[0].baslik).toBe('1984');   // pencere doldu → ilk parça yine seçildi
+    // 89 gün önce gösterilmiş olsaydı hâlâ yasak olurdu
+    const yakin = swPushKur(OZET88, { ayna: { parcaVar: true, gunlukVar: false }, bugun,
+      gecmis: [{ a: 'p1:o:3', g: '2026-05-25' }] });
+    await olayGonder(yakin, 'push');
+    expect(yakin.bildirimler[0].baslik).toBe('Dune');
+  });
+  test('v88 SW parça havuzu TÜKENDİYSE sessiz kalınmaz — yumuşak metin, geçmişe yazım YOK', async () => {
+    const bugun = '2026-08-21';
+    const k = swPushKur(OZET88, { ayna: { parcaVar: true, gunlukVar: false }, bugun,
+      gecmis: [{ a: 'p1:o:3', g: bugun }, { a: 'p2:m:5', g: bugun }] });
+    await olayGonder(k, 'push');
+    expect(k.bildirimler.length).toBe(1);
+    expect(k.bildirimler[0].baslik).toBe('Kitaplığından bir satır');
+    expect(k.idbYazilan.length).toBe(0);
+  });
+  test('v88 SW ÖNCELİK: yeni tetikler hazırken de TEK bildirim, sırasına uygun (gecenYil kazanır)', async () => {
+    const k = swPushKur(OZET88, { ayna: { gecenYilGun: '2026-08-21', gunlukVar: true,
+      yarimSonGun: '2026-08-11', bagVar: true, parcaVar: true }, bugun: '2026-08-21' });
+    await olayGonder(k, 'push');
+    expect(k.bildirimler.length).toBe(1);
+    expect(k.bildirimler[0].secenek.tag).toBe('kitaplik-gecenyil');
   });
 
   test('sw kaynak: bildirim.js ASSETS\'te; OCR kova sözleşmesi bozulmadı (regresyon)', async () => {
@@ -978,23 +1283,32 @@ test.describe('G51 sayfa tarafı', () => {
     });
     expect(r.kapali.okumaSonGun).toBe(null);       // KAPALI → düşer
     expect(r.acik.okumaSonGun).toBe('2026-08-01'); // AÇIK → gider
-    // gizlilik: aynada yalnız beş alan, hiçbiri metin değil
-    expect(Object.keys(r.acik).sort()).toEqual(['okumaSonGun', 'oneriGun', 'oneriVar', 'tempoGeride', 'vade']);
+    /* gizlilik: aynada yalnız GÜN/BAYRAK alanları, hiçbiri metin değil
+       (v88 bilinçli güncelleme: 5 → 13 alan). */
+    expect(Object.keys(r.acik).sort()).toEqual(['bagVar', 'ciltVar', 'gecenYilGun',
+      'gunlukVar', 'hedefGeride', 'hedefGun', 'okumaSonGun', 'oneriGun', 'oneriVar',
+      'parcaVar', 'tempoGeride', 'vade', 'yarimSonGun']);
     const govde = JSON.stringify(r.acik);
     expect(govde).not.toContain('Okunan Kitap');
     expect(govde).not.toContain('ok1');
   });
 
-  test('v63 Ayarlar: dört tetik listelenir, varsayılan yalnız alıntı AÇIK', async ({ page }) => {
+  test('v63+v88 Ayarlar: on bir tetik listelenir; eski dördün varsayılanı KORUNDU, yedi yenisi AÇIK', async ({ page }) => {
     await hatirlatmaAc(page);
     await tohumla(page, [sahteKitap({ ad: 'Deneme' })]);
     await rafAc(page);
     await ayarlarAc(page);
     const dugmeler = page.locator('#htTetikler [data-act="ht-tetik"]');
-    await expect(dugmeler).toHaveCount(4);
+    await expect(dugmeler).toHaveCount(11);
+    /* v63 varsayılanları AYNEN: alinti açık, okuma/oneri/tempo kapalı. */
     await expect(page.locator('#htTetikler [data-v="alinti"]')).toHaveAttribute('aria-pressed', 'true');
     for (const t of ['okuma', 'oneri', 'tempo']) {
       await expect(page.locator('#htTetikler [data-v="' + t + '"]')).toHaveAttribute('aria-pressed', 'false');
+    }
+    /* v88'in yedi yenisi VARSAYILAN AÇIK (bilinçli istisna — talep "boş gün
+       kalmasın"dı; günde-1 kuralı toplam sayıyı zaten sınırlıyor). */
+    for (const t of ['gunluk', 'yarim', 'hedef', 'gecenYil', 'parca', 'bag', 'cilt']) {
+      await expect(page.locator('#htTetikler [data-v="' + t + '"]')).toHaveAttribute('aria-pressed', 'true');
     }
   });
 
@@ -1021,6 +1335,165 @@ test.describe('G51 sayfa tarafı', () => {
     await expect(page.locator('#htTetikler')).toContainText('okunuyor" kitabın yok');
     await page.click('#htTetikler [data-v="tempo"]');
     await expect(page.locator('#htTetikler')).toContainText('Yıl hedefi koymadın');
+  });
+
+  /* ===== v88 sayfa tarafı: parça + yeni özet blokları + ayna ===== */
+
+  test('v88 parcala: 80-220 bandı dışı, BÜYÜK HARF ve ":" ile biten satırlar elenir; markdown soyulur, indeks korunur', async ({ page }) => {
+    await tohumla(page, [sahteKitap({ ad: 'X' })]);
+    await rafAc(page);
+    const r = await page.evaluate(() => window.__bildirim.parcala([
+      'BU SATIR TAMAMEN BÜYÜK HARFLERLE YAZILMIŞ UZUN BİR BAŞLIK SATIRIDIR VE BANT İÇİNDE OLSA BİLE ELENMESİ GEREKİR',
+      'Bu paragraf iki nokta üst üste ile bittiği için başlık sayılır ve elenir; uzunluğu bandın içinde olsa bile alınmaz:',
+      'Kısa satır.',
+      'Bu paragraf **kalın işaretleriyle** birlikte tam bandın içinde kalır ve seçilmeye uygundur; markdown yıldızları metinden soyulur.',
+      'Bandı aşan çok uzun paragraf: ' + 'aynı cümle tekrar ederek sınırı geçer. '.repeat(10)
+    ].join('\n\n')));
+    expect(r.length).toBe(1);
+    expect(r[0].i).toBe(3);                                  // özgün paragraf indeksi
+    expect(r[0].metin).toContain('kalın işaretleriyle');
+    expect(r[0].metin).not.toContain('**');
+    expect(r[0].metin.length).toBeGreaterThanOrEqual(80);
+    expect(r[0].metin.length).toBeLessThanOrEqual(220);
+  });
+
+  test('v88 özet blokları: gunluk EN YENİ, yarim EN ESKİ gsG, gecenYil EN YAKIN gün + EN YAKIN yıl, hedef günlük pay, bag ortak kavram, cilt tavanlı', async ({ page }) => {
+    const bugun = bugunISO(0);
+    const yil = parseInt(bugun.slice(0, 4), 10);
+    const ikiGunSonra = bugunISO(2);
+    const besGunSonra = bugunISO(5);
+    const simdi = Date.now();
+    await tohumla(page, {
+      kitaplar: [
+        sahteKitap({ id: 'aktif', ad: 'Taze Kitap', durum: 'okunuyor', guncelSayfa: 50,
+          sayfa: 100, gsG: simdi - 2 * 86400000,
+          seanslar: [{ t: bugun, a: 40, b: 50 }] }),
+        sahteKitap({ id: 'bayat', ad: 'Takılı Kitap', durum: 'okunuyor', guncelSayfa: 10,
+          sayfa: 200, gsG: simdi - 12 * 86400000,
+          oturumlar: [{ b: simdi, s: 60000, sa: 5, sb: 10 }],
+          notlar: [{ id: 'n2', tip: 'alinti', metin: 'İkinci not', tarih: bugun, fikir: ['özgürlük'] }] }),
+        sahteKitap({ ad: 'Yakın Yıldönümü', durum: 'bitti',
+          bitisTarihi: (yil - 1) + ikiGunSonra.slice(4),
+          notlar: [{ id: 'n1', tip: 'alinti', metin: 'Birinci not', tarih: bugun, fikir: ['özgürlük'] }] }),
+        sahteKitap({ ad: 'Uzak Yıldönümü', durum: 'bitti', bitisTarihi: (yil - 2) + besGunSonra.slice(4) }),
+        sahteKitap({ ad: 'Seri 1', durum: 'bitti', bitisTarihi: null, seri: 'Uzun Seri', ciltNo: 1 }),
+        sahteKitap({ ad: 'Seri 6', durum: 'okunacak', seri: 'Uzun Seri', ciltNo: 6 })
+      ],
+      hedef: {}, hedefSayfa: { [yil]: 7300 }   // günlük pay = 20
+    });
+    await rafAc(page);
+    const r = await page.evaluate(() => {
+      const o = window.__bildirim.ozetHesapla();
+      return { gunluk: o.gunluk, yarim: o.yarim, gecenYil: o.gecenYil,
+        hedef: o.hedef, bag: o.bag, cilt: o.cilt };
+    });
+    expect(r.gunluk.ad).toBe('Taze Kitap');                  // en son ilerleme kaydedilen
+    expect(r.gunluk.sayfa).toBe(50);
+    expect(r.gunluk.toplam).toBe(100);
+    expect(r.yarim.ad).toBe('Takılı Kitap');                 // en eski gsG (en uzun takılı)
+    expect(r.yarim.sonGun).toBe(bugunISO(-12));
+    expect(r.gecenYil.gun).toBe(ikiGunSonra);                // en yakın yıldönümü günü
+    expect(r.gecenYil.ad).toBe('Yakın Yıldönümü');
+    expect(r.gecenYil.yil).toBe(yil - 1);
+    expect(r.hedef.hedef).toBe(20);                          // 7300 / 365
+    expect(r.hedef.okunan).toBe(15);                         // seans 10 + oturum 5
+    expect(r.hedef.geride).toBe(true);
+    expect(r.hedef.gun).toBe(bugun);
+    expect(r.bag.kavram).toBe('özgürlük');                   // iki farklı kitapta geçen etiket
+    expect([r.bag.k1, r.bag.k2].sort()).toEqual(['Takılı Kitap', 'Yakın Yıldönümü']);
+    expect(r.cilt.seri).toBe('Uzun Seri');
+    expect(r.cilt.gosterilen).toEqual([2, 3, 4]);            // tavan: en fazla 3
+    expect(r.cilt.kalan).toBe(1);
+  });
+
+  test('v88 parça havuzu: bitmiş+özetli kitaptan kurulur; ontoloji tercih edilir; gösterilmiş parça 90 gün havuza girmez', async ({ page }) => {
+    const P1 = 'Roman, geçmişi yeniden yazan bir rejimde hakikatin nasıl eritildiğini anlatır; bu paragraf bandın tam içindedir.';
+    const P2 = 'İkinci uygun paragraf da bandın içinde kalır ve havuzda ilk parçadan sonra sıraya girer; içerik gerçek veriden gelir.';
+    await tohumla(page, [
+      sahteKitap({ id: 'oz1', ad: 'Özetli Kitap', durum: 'bitti' }),
+      sahteKitap({ id: 'oz2', ad: 'Ontolojili Kitap', durum: 'bitti' })
+    ]);
+    await rafAc(page);
+    await page.evaluate(async ({ p1, p2 }) => {
+      await window.__ozet.hazirBekle();
+      await window.__ozet.kaydet('oz1', p1 + '\n\n' + p2);
+      await window.__ozet.kaydet('oz2', 'Özet metni de var ama ontoloji tercih edilmeli; bu paragraf da bant içinde kalacak uzunluktadır ve konu dışıdır.');
+      await window.__ozet.kaydetOnto('oz2', p2);
+    }, { p1: P1, p2: P2 });
+    const havuz1 = await page.evaluate(() => window.__bildirim.parcaOzeti());
+    expect(havuz1.havuz.length).toBe(3);
+    const oz2Parca = havuz1.havuz.find(p => p.k === 'oz2');
+    expect(oz2Parca.kay).toBe('o');                          // ontoloji tercih edildi
+    const ilk = havuz1.havuz.find(p => p.k === 'oz1');
+    expect(ilk.i).toBe(0);
+    /* SW'nin yazdığı biçimde geçmişe yaz: oz1'in ilk parçası dün gösterildi. */
+    await page.evaluate(({ anahtar, gun }) => new Promise(res => {
+      const istek = indexedDB.open('kk_bildirim_v1', 1);
+      istek.onupgradeneeded = () => istek.result.createObjectStore('ozet');
+      istek.onsuccess = () => {
+        const tx = istek.result.transaction('ozet', 'readwrite');
+        tx.objectStore('ozet').put([{ a: anahtar, g: gun }], 'parcaGecmis');
+        tx.oncomplete = () => res();
+      };
+    }), { anahtar: 'oz1:m:0', gun: bugunISO(-1) });
+    const havuz2 = await page.evaluate(() => window.__bildirim.parcaOzeti());
+    expect(havuz2.havuz.map(p => p.k + ':' + p.kay + ':' + p.i)).not.toContain('oz1:m:0');
+    /* 91 gün önce gösterilmiş olsaydı pencere dolar, parça geri gelirdi. */
+    await page.evaluate(({ anahtar, gun }) => new Promise(res => {
+      const istek = indexedDB.open('kk_bildirim_v1', 1);
+      istek.onsuccess = () => {
+        const tx = istek.result.transaction('ozet', 'readwrite');
+        tx.objectStore('ozet').put([{ a: anahtar, g: gun }], 'parcaGecmis');
+        tx.oncomplete = () => res();
+      };
+    }), { anahtar: 'oz1:m:0', gun: bugunISO(-91) });
+    const havuz3 = await page.evaluate(() => window.__bildirim.parcaOzeti());
+    expect(havuz3.havuz.map(p => p.k + ':' + p.kay + ':' + p.i)).toContain('oz1:m:0');
+  });
+
+  test('v88 AYNA: yeni tetik alanları dolu; kapalı tetik aynadan düşer (hiç seçilemez)', async ({ page }) => {
+    const bugun = bugunISO(0);
+    await tohumla(page, [
+      sahteKitap({ id: 'ok1', ad: 'Okunan', durum: 'okunuyor', guncelSayfa: 5,
+        gsG: Date.now() - 3 * 86400000 })
+    ]);
+    await rafAc(page);
+    const r = await page.evaluate(() => {
+      const B = window.__bildirim;
+      const o = B.ozetHesapla();
+      const hepsiAcik = {};
+      const hepsiKapali = {};
+      B.TETIKLER.forEach(t => { hepsiAcik[t] = true; hepsiKapali[t] = false; });
+      return { acik: B.aynaOlustur(o, { tetik: hepsiAcik, oneriGun: 0 }),
+        kapali: B.aynaOlustur(o, { tetik: hepsiKapali, oneriGun: 0 }) };
+    });
+    expect(r.acik.gunlukVar).toBe(true);
+    expect(r.acik.yarimSonGun).toBe(bugunISO(-3));
+    expect(r.kapali.gunlukVar).toBe(false);                  // kapalı → sunucu uyandırmaz
+    expect(r.kapali.yarimSonGun).toBe(null);
+    expect(r.kapali.parcaVar).toBe(false);
+    expect(r.kapali.gecenYilGun).toBe(null);
+    expect(r.kapali.bagVar).toBe(false);
+    expect(r.kapali.ciltVar).toBe(false);
+    expect(r.kapali.hedefGeride).toBe(false);
+    expect(r.kapali.hedefGun).toBe(null);
+  });
+
+  test('v88 Ayarlar: yeni tetik kapatılınca tercih kalıcı ve ayna alanı düşüyor', async ({ page }) => {
+    await hatirlatmaAc(page);
+    await tohumla(page, [sahteKitap({ ad: 'Okunan', durum: 'okunuyor', guncelSayfa: 5 })]);
+    await rafAc(page);
+    await ayarlarAc(page);
+    await page.click('#htTetikler [data-v="gunluk"]');       // varsayılan açık → kapat
+    await expect(page.locator('#htTetikler [data-v="gunluk"]')).toHaveAttribute('aria-pressed', 'false');
+    const ayna = await page.evaluate(() => {
+      const B = window.__bildirim;
+      return B.aynaOlustur(B.ozetHesapla(), B.ayarYukle());
+    });
+    expect(ayna.gunlukVar).toBe(false);
+    await page.reload();
+    await ayarlarAc(page);
+    await expect(page.locator('#htTetikler [data-v="gunluk"]')).toHaveAttribute('aria-pressed', 'false');
   });
 
   test('saat seçici 24 seçenek, tercih localStorage\'da kalıcı', async ({ page }) => {

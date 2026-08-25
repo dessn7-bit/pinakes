@@ -4761,6 +4761,9 @@ if('serviceWorker' in navigator){
           if(k) detayAc(k.id);
           return;
         }
+        /* v88: ?seri= — eksik cilt bildirimi serinin rafına gider (boot'la aynı sıra) */
+        const seriAd = p.get('seri');
+        if(seriAd){ seriRafAc(seriAd); return; }
         const s = p.get('sekme');
         if(s && s !== 'alinti' && document.getElementById('panel-' + s)) sekmeGec(s);
       }catch(h){ /* bozuk derin bağlantı — sessiz geçiş kasıtlı */ }
@@ -4809,6 +4812,15 @@ cipKaydirmaKur();
   if(fAyr) fAyr.addEventListener('input', fAyrintiOzetGuncelle);
 })();
 
+/* v88: seri adına raf araması — vm-seri-filtre eyleminin derin-bağlantı eşi.
+   Hem ?seri= boot yolundan hem SW'nin bildirim-ac mesajından çağrılır. */
+function seriRafAc(ad){
+  durum.arama = ad;
+  const ara = document.getElementById('arama');
+  if(ara) ara.value = ad;
+  sekmeGec('raf');
+  listeCiz();
+}
 /* Paylaş hedefinden gelindiyse paneli aç; kısayoldan gelindiyse sekmeyi seç.
    Sıra korunuyor: paylaşım parametresi varsa ?sekme= hiç okunmaz. */
 (function(){
@@ -4824,6 +4836,10 @@ cipKaydirmaKur();
       if(k){ sekmeGec('raf'); detayAc(k.id); } else { sekmeGec('raf'); }
       urlTemizle(); return;
     }
+    /* v88: ?seri=<ad> — eksik cilt bildirimi doğrudan serinin rafını açar
+       (vm-seri-filtre eylemiyle aynı davranış; mesaj dinleyicisiyle aynı sıra). */
+    const seriAd = new URLSearchParams(location.search).get('seri');
+    if(seriAd){ seriRafAc(seriAd); urlTemizle(); return; }
     const s = new URLSearchParams(location.search).get('sekme');
     if(!s) return;
     /* ?sekme=yedek artık bir panel değil: eski yer imi/kısayol sessizce Ana

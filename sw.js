@@ -1,4 +1,4 @@
-const CACHE = 'kitaplik-v86';
+const CACHE = 'kitaplik-v88';
 // OCR paketi kovası (ocr.js yönetir): ~6 MB'lik tesseract paketi kullanıcı
 // ONAYIYLA bir kez iner, buraya alınır. ASSETS'e BİLEREK girmez — ilk PWA
 // kurulumunda 6 MB indirtmek yanlış olurdu. ocr.js dosyasının kendisi (küçük
@@ -89,15 +89,23 @@ function bildirimGunIso() {
   return s.getFullYear() + '-' + String(s.getMonth() + 1).padStart(2, '0') +
     '-' + String(s.getDate()).padStart(2, '0');
 }
-/* ---------- v63: DÖRT TETİK ----------
+/* ---------- v63+v88: ON BİR TETİK ----------
    ÖNCELİK worker.js'teki ONCELIK dizisiyle BİREBİR aynı olmalı — statik vaka
-   kilitler. Nadir olan önce: alıntı kuyruğu çoğu gün dolu olduğu için başa
-   konsaydı, günde-1 kuralı yüzünden tempo/öneri HİÇ seçilmezdi (açlık). */
-const ONCELIK = ['tempo', 'oneri', 'okuma', 'alinti'];
+   kilitler. Sıra = KITLIK/kırılganlık: penceresi en dar olan (kaçırılırsa en
+   geç dönen) önce — gecenYil yılda 1 gün, tempo/bag/cilt ayda 1 gün, yarim
+   10-gün merdiveni, oneri haftada 1, okuma 7-gün merdiveni, hedef aynı-gün
+   bayrağı, alinti vadesi geçtikçe BEKLER (kaçsa da kaybolmaz), parca/gunluk
+   süreklidir ve dönüşümlü olarak boş günleri doldurur. */
+const ONCELIK = ['gecenYil', 'tempo', 'bag', 'cilt', 'yarim', 'oneri', 'okuma', 'hedef', 'alinti', 'parca', 'gunluk'];
 const OKUMA_ESIK = 7;              // worker.js ile aynı — ölçülerek seçildi
+const YARIM_ESIK = 10;             // worker.js ile aynı — yarım kitap merdiveni
+const PARCA_TEKRAR_GUN = 90;       // bildirim.js ile aynı — parça tekrar penceresi
 
 function swGunFarki(a, b) {
   return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
+}
+function swEpochGun(gun) {         // parça/günlük dönüşümü için gün paritesi
+  return Math.floor(Date.parse(gun + 'T00:00:00Z') / 86400000);
 }
 /* Tetik hazır mı? worker.js'teki tetikHazirMi'nin İKİZİ — girdi AYNADIR
    (sunucuya gönderilen alanlar), taze veri değil. Böylece sunucunun "gönder"
@@ -115,6 +123,20 @@ function swTetikHazir(t, ayna, bugun) {
     return new Date(bugun + 'T00:00:00Z').getUTCDay() === ayna.oneriGun;
   }
   if (t === 'tempo') return !!ayna.tempoGeride && parseInt(bugun.slice(8, 10), 10) === 1;
+  /* v88 — hepsi saf fonksiyon (alanlar + tarih), durum damgası YOK. */
+  if (t === 'gunluk') return !!ayna.gunlukVar;
+  if (t === 'yarim') {
+    if (!ayna.yarimSonGun) return false;
+    const g = swGunFarki(ayna.yarimSonGun, bugun);
+    return g >= YARIM_ESIK && g % YARIM_ESIK === 0;
+  }
+  if (t === 'hedef') return !!ayna.hedefGeride && ayna.hedefGun === bugun;
+  if (t === 'gecenYil') return !!ayna.gecenYilGun && ayna.gecenYilGun === bugun;
+  /* parca: tek günlerde; okunuyor kitap yoksa (gunluk sessizken) her gün —
+     iki sürekli tetik fixed sırayla birbirini boğmasın diye tarihe bağlı nöbet. */
+  if (t === 'parca') return !!ayna.parcaVar && (swEpochGun(bugun) % 2 === 1 || !ayna.gunlukVar);
+  if (t === 'bag') return !!ayna.bagVar && parseInt(bugun.slice(8, 10), 10) === 8;
+  if (t === 'cilt') return !!ayna.ciltVar && parseInt(bugun.slice(8, 10), 10) === 15;
   return false;
 }
 /* Metni ÖZETTEN (taze yerel veri) üretir. Ayrıntı yoksa aynı tetiğin YUMUŞAK
@@ -158,15 +180,128 @@ function bildirimIcerik(tetik, ozet, bugun) {
       govde: 'Bu tempoyla yıl sonunda ~' + t.projeksiyon + ' kitap; hedefin ' + t.hedef + '.',
       etiket: 'kitaplik-tempo', hedef: './index.html?sekme=ist' };
   }
+  /* ---------- v88 tetik metinleri ---------- */
+  if (tetik === 'gunluk') {
+    const o = ozet && ozet.gunluk;
+    if (!o || !o.ad) return { baslik: 'Bugün birkaç sayfa?',
+      govde: 'Okuduğun kitaba dönmeye ne dersin?',
+      etiket: 'kitaplik-gunluk', hedef: './index.html?sekme=raf' };
+    const yer = o.sayfa
+      ? (o.toplam ? o.sayfa + '/' + o.toplam + '. sayfadasın.' : o.sayfa + '. sayfadasın.')
+      : 'Henüz başındasın — bugün birkaç sayfa?';
+    return { baslik: o.ad, govde: yer, etiket: 'kitaplik-gunluk',
+      hedef: o.id ? './index.html?kitap=' + encodeURIComponent(o.id) : './index.html?sekme=raf' };
+  }
+  if (tetik === 'yarim') {
+    const o = ozet && ozet.yarim;
+    if (!o || !o.ad || !o.sonGun) return { baslik: 'Yarım kalan kitabın var',
+      govde: 'Kaldığın yerden devam etmeye ne dersin?',
+      etiket: 'kitaplik-yarim', hedef: './index.html?sekme=raf' };
+    const gun = swGunFarki(o.sonGun, bugun);
+    return { baslik: o.ad,
+      govde: (gun > 0 ? gun + ' gündür ' : '') + (o.sayfa ? o.sayfa + '. sayfadasın.' : 'ilerleme yok.'),
+      etiket: 'kitaplik-yarim',
+      hedef: o.id ? './index.html?kitap=' + encodeURIComponent(o.id) : './index.html?sekme=raf' };
+  }
+  if (tetik === 'hedef') {
+    const h = ozet && ozet.hedef;
+    /* Özet bayat (başka güne ait) ise sayı UYDURULMAZ — yumuşak metin. */
+    if (!h || !h.hedef || h.gun !== bugun) return { baslik: 'Günlük sayfa hedefin',
+      govde: 'Bugünün payına göz at.',
+      etiket: 'kitaplik-hedef', hedef: './index.html?sekme=ist' };
+    return { baslik: 'Günlük sayfa hedefin',
+      govde: 'Bugün ' + h.okunan + ' sayfa okudun, hedefin ' + h.hedef + '.',
+      etiket: 'kitaplik-hedef', hedef: './index.html?sekme=ist' };
+  }
+  if (tetik === 'gecenYil') {
+    const g = ozet && ozet.gecenYil;
+    if (!g || !g.ad || g.gun !== bugun) return { baslik: 'Bugünün bir geçmişi var',
+      govde: 'Bitirdiğin kitaplara göz at.',
+      etiket: 'kitaplik-gecenyil', hedef: './index.html?sekme=raf' };
+    const buYil = parseInt(bugun.slice(0, 4), 10);
+    const baslik = (buYil - g.yil === 1) ? 'Geçen yıl bugün' : g.yil + ' yılında bugün';
+    return { baslik, govde: g.ad + ' kitabını bitirmiştin.',
+      etiket: 'kitaplik-gecenyil',
+      hedef: g.id ? './index.html?kitap=' + encodeURIComponent(g.id) : './index.html?sekme=raf' };
+  }
+  if (tetik === 'bag') {
+    const b = ozet && ozet.bag;
+    if (!b || !b.kavram) return { baslik: 'Fikirlerin arasında bağ var',
+      govde: 'Fikir ağına göz at.',
+      etiket: 'kitaplik-bag', hedef: './index.html?sekme=alinti' };
+    return { baslik: 'İki kitap, bir fikir',
+      govde: '"' + b.kavram + '" — ' + b.k1 + ' ile ' + b.k2 + ' bu kavramda buluşuyor.',
+      etiket: 'kitaplik-bag', hedef: './index.html?sekme=alinti' };
+  }
+  if (tetik === 'cilt') {
+    const c = ozet && ozet.cilt;
+    if (!c || !c.seri || !(c.gosterilen || []).length) return { baslik: 'Serilerinde boşluk var',
+      govde: 'Eksik ciltlere göz at.',
+      etiket: 'kitaplik-cilt', hedef: './index.html?sekme=raf' };
+    /* TAVAN: en fazla 3 cilt yazılır (oneri.js ile aynı karar) — gosterilen
+       zaten kırpılmış gelir, kalan sayıyla söylenir. */
+    const coklu = c.gosterilen.length > 1;
+    return { baslik: c.seri + ' serisi',
+      govde: c.gosterilen.join(' ve ') + '. ' + (coklu ? 'ciltleri' : 'cildi') + ' eksik' +
+        (c.kalan > 0 ? ' (ve ' + c.kalan + ' cilt daha)' : '') + '.',
+      etiket: 'kitaplik-cilt', hedef: './index.html?seri=' + encodeURIComponent(c.seri) };
+  }
   return null;
 }
+/* ---------- v88: parça seçimi + gösterim geçmişi ----------
+   Havuz bildirim.js'te kurulur (bitmiş+özetli kitaplardan süzülmüş paragraflar);
+   SW gösterim ANINDA geçmişe yazar — aynı parça 90 gün içinde tekrar seçilmez.
+   Geçmiş cihaz-yerelidir, sunucuya hiçbir şey gitmez. */
+function parcaSec(ozet, gecmis, bugun) {
+  const havuz = (ozet && ozet.parca && Array.isArray(ozet.parca.havuz)) ? ozet.parca.havuz : [];
+  const taze = (Array.isArray(gecmis) ? gecmis : [])
+    .filter(g => g && g.a && g.g && swGunFarki(g.g, bugun) < PARCA_TEKRAR_GUN);
+  const yasak = new Set(taze.map(g => g.a));
+  const p = havuz.find(x => x && x.ad && x.metin && !yasak.has(x.k + ':' + x.kay + ':' + x.i));
+  if (!p) return null;
+  taze.push({ a: p.k + ':' + p.kay + ':' + p.i, g: bugun });
+  return { icerik: { baslik: p.ad, govde: p.metin, etiket: 'kitaplik-parca',
+      hedef: p.k ? './index.html?kitap=' + encodeURIComponent(p.k) : './index.html' },
+    gecmis: taze.slice(-400) };   // 90 günlük pencerede fazlası zaten elenir; tavan emniyet
+}
+function bildirimGecmisYaz(liste) {
+  return new Promise(resolve => {
+    let bitti = false;
+    const son = () => { if (!bitti) { bitti = true; resolve(); } };
+    try {
+      const istek = indexedDB.open(BILDIRIM_DB, 1);
+      istek.onupgradeneeded = () => { try { istek.result.createObjectStore('ozet'); } catch (e) { /* mağaza zaten var — sessiz geçiş kasıtlı */ } };
+      istek.onsuccess = () => {
+        const db = istek.result;
+        try {
+          const tx = db.transaction('ozet', 'readwrite');
+          tx.objectStore('ozet').put(liste, 'parcaGecmis');
+          tx.oncomplete = () => { son(); try { db.close(); } catch (e) { /* zaten kapalı — kasıtlı */ } };
+          tx.onerror = () => { son(); try { db.close(); } catch (e) { /* zaten kapalı — kasıtlı */ } };
+          tx.onabort = () => { son(); try { db.close(); } catch (e) { /* zaten kapalı — kasıtlı */ } };
+        } catch (e) { son(); try { db.close(); } catch (h) { /* zaten kapalı — kasıtlı */ } }
+      };
+      istek.onerror = () => son();
+    } catch (e) { son(); }
+  });
+}
 self.addEventListener('push', e => {
-  e.waitUntil(Promise.all([bildirimOzetOku('ayna'), bildirimOzetOku('guncel')]).then(([ayna, ozet]) => {
+  e.waitUntil(Promise.all([bildirimOzetOku('ayna'), bildirimOzetOku('guncel'),
+    bildirimOzetOku('parcaGecmis')]).then(([ayna, ozet, gecmis]) => {
     const bugun = bildirimGunIso();
     /* HANGİ tetik: aynadan (sunucuyla aynı girdi). NE yazılacağı: özetten.
        Ayna yoksa/hiçbir tetik hazır değilse GENEL yedek — sessizlik YOK. */
     const tetik = ONCELIK.find(t => swTetikHazir(t, ayna, bugun));
-    const i = tetik ? bildirimIcerik(tetik, ozet, bugun) : null;
+    let i = null;
+    let gecmisYeni = null;
+    if (tetik === 'parca') {
+      /* v88: parça içeriği geçmişe bakarak seçilir; havuz tükendiyse (hepsi
+         90 gün penceresinde gösterilmiş) yumuşak metin — sessizlik yine YOK. */
+      const secim = parcaSec(ozet, gecmis, bugun);
+      if (secim) { i = secim.icerik; gecmisYeni = secim.gecmis; }
+      else i = { baslik: 'Kitaplığından bir satır', govde: 'Özetlerine yeniden göz atmaya ne dersin?',
+        etiket: 'kitaplik-parca', hedef: './index.html' };
+    } else if (tetik) i = bildirimIcerik(tetik, ozet, bugun);
     const g = i || { baslik: 'Kitaplığın seni bekliyor',
       govde: 'Bugün için bir hatırlatman var.',
       etiket: 'kitaplik-genel', hedef: './index.html' };
@@ -176,6 +311,11 @@ self.addEventListener('push', e => {
       icon: './icon-192.png',
       badge: './icon-192.png',
       data: { hedef: g.hedef }
+    }).then(() => {
+      /* Geçmiş, bildirim GERÇEKTEN gösterildikten sonra yazılır — gösterilmeyen
+         parça yakılmaz. Yazım düşerse bir sonraki push aynı parçayı seçebilir
+         (kabul edilen küçük risk; veri kaybı yok). */
+      if (gecmisYeni) return bildirimGecmisYaz(gecmisYeni);
     });
   }));
 });

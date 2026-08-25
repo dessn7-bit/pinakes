@@ -33,22 +33,34 @@
 
   function bildir(m){ if(typeof toast === 'function') toast(m); }
 
-  /* ---------- v63: tetikler ----------
-     Dört tetik ayrı ayrı açılıp kapanır. VARSAYILAN: yalnız 'alinti' AÇIK —
-     üç yenisi KAPALI. Gerekçe (regresyon güvencesi): mevcut kullanıcı güncelleme
-     sonrası bugünkü davranışın BİREBİR aynısını görür; yeni bildirim türü ancak
-     kullanıcı isteyerek açtığında gelir. Bildirim, izin istenen bir alandır —
-     sessizce genişletilmez.
-     ÖNCELİK: worker.js'teki ONCELIK dizisiyle BİREBİR aynı olmalı (statik vaka
-     kilitler). Nadir olan önce — bol olan (alıntı) her günü işgal edip
-     diğerlerini açlıktan öldürmesin. */
-  const TETIKLER = ['tempo', 'oneri', 'okuma', 'alinti'];
+  /* ---------- v63+v88: tetikler ----------
+     On bir tetik ayrı ayrı açılıp kapanır.
+     VARSAYILANLAR: v63'ün dört tetiği DEĞİŞMEDİ (alinti açık; okuma/oneri/tempo
+     kapalı — kullanıcı ne seçtiyse o). v88'in YEDİ yeni tetiği VARSAYILAN AÇIK:
+     bu, v63'ün "sessizce genişletilmez" ilkesinin BİLİNÇLİ istisnası — talep
+     tam tersiydi: bildirimler açık olduğu halde günler boş geçiyordu. Günde-1
+     kuralı değişmediği için toplam bildirim SAYISI artmaz, yalnız boş gün azalır;
+     istemeyen her tetiği tek tek kapatabilir.
+     ÖNCELİK: worker.js + sw.js'teki ONCELIK dizisiyle BİREBİR aynı olmalı
+     (statik vaka kilitler). Sıra = KITLIK/kırılganlık: penceresi en dar olan
+     (kaçırılırsa en geç geri gelen) önce, süreklisi (parca/gunluk) en sonda. */
+  const TETIKLER = ['gecenYil', 'tempo', 'bag', 'cilt', 'yarim', 'oneri',
+    'okuma', 'hedef', 'alinti', 'parca', 'gunluk'];
   const VARSAYILAN_ONERI_GUN = 0;   // Pazar — haftalık planlama günü; hafta başı
                                     // olsaydı "okuyamadım" suçluluğuna dönerdi
+  const YARIM_ESIK = 10;            // gün — sw.js/worker.js ile aynı (merdiven)
+  const PARCA_MIN = 80, PARCA_MAX = 220;   // parça uzunluk bandı (karakter)
+  const PARCA_TEKRAR_GUN = 90;      // aynı parça bu pencerede tekrar gösterilmez
+  const PARCA_HAVUZ = 40;           // SW'ye taşınan aday sayısı (uygulama hiç
+                                    // açılmasa bile ~80 günlük tekrarsız içerik)
   function tetikYukle(t){
     const g = (t && typeof t === 'object') ? t : {};
-    return { alinti: g.alinti === undefined ? true : !!g.alinti,
-      okuma: !!g.okuma, oneri: !!g.oneri, tempo: !!g.tempo };
+    const b = (ad, varsayilan) => g[ad] === undefined ? varsayilan : !!g[ad];
+    return { alinti: b('alinti', true), okuma: b('okuma', false),
+      oneri: b('oneri', false), tempo: b('tempo', false),
+      gunluk: b('gunluk', true), yarim: b('yarim', true), hedef: b('hedef', true),
+      gecenYil: b('gecenYil', true), parca: b('parca', true),
+      bag: b('bag', true), cilt: b('cilt', true) };
   }
 
   /* ---------- ayar (localStorage) ---------- */
@@ -110,6 +122,10 @@
      birden güncellemeyi zorunlu kılardı.) */
   const aynaYazIdb = a => islem('readwrite', st => st.put(a, 'ayna'));
   const aynaOku = () => islem('readonly', st => st.get('ayna'));
+  /* v88: gösterilen parça geçmişi (kitapId:kaynak:paragrafIndeksi + gün).
+     YAZAN taraf sw.js'tir (bildirim gerçekten gösterildiği anda) — burada yalnız
+     OKUNUR ve havuz kurulurken 90 gün içinde gösterilenler elenir. */
+  const parcaGecmisOku = () => islem('readonly', st => st.get('parcaGecmis'));
 
   /* ---------- özet hesabı (salt okuma — veri'ye yazmaz) ---------- */
   function kirp(m){
@@ -133,8 +149,22 @@
       okuma: okumaOzeti(),
       oneri: oneriOzeti(),
       tempo: tempoOzeti(),
+      gunluk: gunlukOzeti(),
+      yarim: yarimOzeti(),
+      hedef: hedefOzeti(),
+      gecenYil: gecenYilOzeti(),
+      bag: bagOzeti(),
+      cilt: ciltOzeti(),
       guncelleme: Date.now()
     };
+  }
+  /* v88: özet + parça havuzu birlikte. Parça hesabı ASYNC (özet deposu yüklemesi
+     + gösterim geçmişi okuması bekler); ozetHesapla'nın senkron sözleşmesi
+     bozulmasın diye ayrı katman. */
+  async function ozetTam(){
+    const o = ozetHesapla();
+    o.parca = await parcaOzeti();
+    return o;
   }
 
   /* ---------- v63 tetik özetleri ----------
@@ -150,26 +180,27 @@
      EN YENİSİ alınır — sıfırlama/bitirme yollarında yalnız gsG basılıyor.
      Birden fazla okunuyor kitap varsa EN UZUN SESSİZ olan seçilir: hatırlatmayı
      hak eden, en çok unutulandır. */
+  /* Kitabın son etkinlik günü: ÜÇ kaynağın EN YENİSİ — "ilk dolu olan" DEĞİL.
+     Üçü birbirini kapsamıyor: oturum-bitir (oturum.js) oturum + gsG yazar ama
+     seansEkle'yi ÇAĞIRMAZ; geriye düzeltme yalnız gsG yazar; sayfa ilerletmeyen
+     süreli oturum yalnız oturumlar'a yazar. Sabit bir sıra kullanılsaydı BAYAT
+     bir kayıt taze olanı gölgeler ve haksız hatırlatma çıkardı.
+     (v88: okuma + gunluk aynı ölçüyü kullanır — okumaOzeti'nden çıkarıldı.) */
+  function kitapSonGun(k){
+    const adaylar = [];
+    if(k.gsG) adaylar.push(gunIsoDamga(k.gsG));
+    (k.seanslar || []).forEach(s => { if(s && s.t) adaylar.push(s.t); });
+    (k.oturumlar || []).forEach(o => {
+      if(o && o.b) adaylar.push(typeof o.b === 'number' ? gunIsoDamga(o.b) : String(o.b).slice(0, 10));
+    });
+    adaylar.sort();
+    return adaylar.length ? adaylar[adaylar.length - 1] : null;
+  }
   function okumaOzeti(){
     try{
       const okunuyor = (veri.kitaplar || []).filter(k => k && k.durum === 'okunuyor');
       if(!okunuyor.length) return null;
-      /* ÜÇ kaynağın EN YENİSİ — "ilk dolu olan" DEĞİL. Üçü birbirini kapsamıyor:
-         oturum-bitir (oturum.js) oturum + gsG yazar ama seansEkle'yi ÇAĞIRMAZ;
-         geriye düzeltme yalnız gsG yazar; sayfa ilerletmeyen süreli oturum
-         yalnız oturumlar'a yazar. Sabit bir sıra kullanılsaydı BAYAT bir kayıt
-         taze olanı gölgeler ve haksız hatırlatma çıkardı. */
-      const gunu = k => {
-        const adaylar = [];
-        if(k.gsG) adaylar.push(gunIsoDamga(k.gsG));
-        (k.seanslar || []).forEach(s => { if(s && s.t) adaylar.push(s.t); });
-        (k.oturumlar || []).forEach(o => {
-          if(o && o.b) adaylar.push(typeof o.b === 'number' ? gunIsoDamga(o.b) : String(o.b).slice(0, 10));
-        });
-        adaylar.sort();
-        return adaylar.length ? adaylar[adaylar.length - 1] : null;
-      };
-      const sirali = okunuyor.map(k => ({ k, gun: gunu(k) }))
+      const sirali = okunuyor.map(k => ({ k, gun: kitapSonGun(k) }))
         /* ilerleme kaydı HİÇ olmayan kitap en sessiz sayılır ('' en küçük) */
         .sort((a, b) => String(a.gun || '').localeCompare(String(b.gun || '')));
       const s = sirali[0];
@@ -203,6 +234,181 @@
     return s.getFullYear() + '-' + String(s.getMonth() + 1).padStart(2, '0') +
       '-' + String(s.getDate()).padStart(2, '0');
   }
+  function gunFark(a, b){   // b - a, tam gün (ISO 'YYYY-MM-DD') — sw.js swGunFarki ikizi
+    return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
+  }
+
+  /* ---------- v88 tetik özetleri ----------
+     Hepsi cihazda kalır; sunucuya yalnız aynaOlustur'un GÜN/BAYRAK alanları gider. */
+
+  /* gunluk: okunuyor kitaplardan EN SON ilerleme kaydedileni (okuma tetiğinin
+     TERSİ — o en unutulanı seçer; bu, bugün elindeki kitabı hatırlatır). */
+  function gunlukOzeti(){
+    try{
+      const okunuyor = (veri.kitaplar || []).filter(k => k && k.durum === 'okunuyor');
+      if(!okunuyor.length) return null;
+      const sirali = okunuyor.map(k => ({ k, gun: kitapSonGun(k) }))
+        .sort((a, b) => String(b.gun || '').localeCompare(String(a.gun || '')));
+      const s = sirali[0];
+      return { id: s.k.id, ad: s.k.ad, sayfa: s.k.guncelSayfa || 0, toplam: s.k.sayfa || 0 };
+    }catch(e){ return null; }
+  }
+  /* yarim: okunuyor ama guncelSayfa'sı kıpırdamayan kitap. Ölçü BİLEREK yalnız
+     gsG (sayfa ilerlemesi damgası): okuma tetiği genel etkinlik sessizliğini,
+     bu ise "sayfada takılı kalmayı" ölçer — süreli oturum yapan ama sayfa
+     girmeyen kullanıcıda ikisi ayrışır ve mesaj ("N gündür X. sayfadasın")
+     yine gerçeğe uygun kalır. Hiç gsG yoksa mesaj kurulamaz → tetik sessiz.
+     En eski gsG'li (en uzun takılı) kitap seçilir. */
+  function yarimOzeti(){
+    try{
+      const adaylar = (veri.kitaplar || []).filter(k => k && k.durum === 'okunuyor' && k.gsG);
+      if(!adaylar.length) return null;
+      const sirali = adaylar.map(k => ({ k, gun: gunIsoDamga(k.gsG) }))
+        .sort((a, b) => a.gun.localeCompare(b.gun));
+      const s = sirali[0];
+      return { id: s.k.id, ad: s.k.ad, sayfa: s.k.guncelSayfa || 0, sonGun: s.gun };
+    }catch(e){ return null; }
+  }
+  /* hedef: uygulamada GÜNLÜK sayfa hedefi diye ayrı bir alan YOK — kaynak,
+     zeka.js'in YILLIK sayfa hedefi (veri.hedefSayfa[yıl]); günlük pay 365'e
+     bölmeyle türetilir. Bugün okunan = bugünkü seans deltaları + bugünkü
+     oturum sayfaları (iki kanal birbirini kapsamıyor: oturum-bitir seans
+     yazmaz; ikisi de guncelSayfa üstünden ayrık aralıklar taşır). */
+  function hedefOzeti(){
+    try{
+      const yil = new Date().getFullYear();
+      const yillik = Number(((typeof veri === 'object' && veri && veri.hedefSayfa) || {})[yil]) || 0;
+      if(!(yillik > 0)) return null;
+      const gunlukPay = Math.max(1, Math.ceil(yillik / 365));
+      const bugun = gunIso();
+      let okunan = 0;
+      (veri.kitaplar || []).forEach(k => {
+        if(!k) return;
+        (k.seanslar || []).forEach(s => { if(s && s.t === bugun && s.b > s.a) okunan += s.b - s.a; });
+        (k.oturumlar || []).forEach(o => {
+          if(o && !o.sup && o.b && gunIsoDamga(o.b) === bugun && o.sb > o.sa) okunan += o.sb - o.sa;
+        });
+      });
+      return { hedef: gunlukPay, okunan, gun: bugun, geride: okunan < gunlukPay };
+    }catch(e){ return null; }
+  }
+  /* gecenYil: geçmiş bir yılın AYNI GÜNÜNDE bitmiş kitap (arşiv okumalar[]
+     dahil). Ayna'ya GÜN gider: bugünden itibaren EN YAKIN yıldönümü günü —
+     bayrak yerine gün göndermek, uygulama günlerce açılmasa bile bildirimin
+     doğru günde ateşlenmesini sağlar (bayat "bugün" bayrağı yalan söylerdi).
+     Aynı güne birden çok yıl düşerse EN YAKIN yıl seçilir. */
+  function gecenYilOzeti(){
+    try{
+      const buYil = new Date().getFullYear();
+      const bugun = gunIso();
+      let enIyi = null;
+      (veri.kitaplar || []).forEach(k => {
+        if(!k) return;
+        const tarihler = [];
+        if(k.durum === 'bitti' && k.bitisTarihi) tarihler.push(String(k.bitisTarihi));
+        (k.okumalar || []).forEach(o => { if(o && o.bit) tarihler.push(String(o.bit)); });
+        tarihler.forEach(t => {
+          const yil = parseInt(t.slice(0, 4), 10);
+          if(!(yil > 1900 && yil < buYil) || t.length < 10) return;
+          let gun = buYil + '-' + t.slice(5, 10);
+          if(gun < bugun) gun = (buYil + 1) + '-' + t.slice(5, 10);
+          if(isNaN(Date.parse(gun + 'T00:00:00Z'))) return;   // 29 Şubat artık-olmayan yıl
+          if(!enIyi || gun < enIyi.gun || (gun === enIyi.gun && yil > enIyi.yil))
+            enIyi = { gun, yil, ad: k.ad, id: k.id };
+        });
+      });
+      return enIyi;
+    }catch(e){ return null; }
+  }
+  /* bag: fikirag.js'in HAZIR hesabı — farklı kitapların notlarında geçen ortak
+     kavram (etiket başına kitap yayılımı ≥2). Motor fikirag'da; burada yalnız
+     kazanan kavramın iki kitabı adlandırılır. */
+  function bagOzeti(){
+    try{
+      if(!window.__fikirag || typeof window.__fikirag.etiketOzet !== 'function') return null;
+      const capraz = window.__fikirag.etiketOzet().filter(e => e.kitapSayisi >= 2)
+        .sort((a, b) => b.kitapSayisi - a.kitapSayisi || b.notSayisi - a.notSayisi
+          || a.ad.localeCompare(b.ad, 'tr'));
+      if(!capraz.length) return null;
+      const kavram = capraz[0].ad;
+      const adlar = [];
+      (veri.kitaplar || []).forEach(k => {
+        if(adlar.length >= 2 || !k) return;
+        if((k.notlar || []).some(n => n && (n.fikir || []).indexOf(kavram) >= 0)) adlar.push(k.ad);
+      });
+      if(adlar.length < 2) return null;
+      return { kavram, k1: adlar[0], k2: adlar[1] };
+    }catch(e){ return null; }
+  }
+  /* cilt: oneri.js'in HAZIR eksik-seri hesabı. Tamamlanmaya en yakın seri
+     seçilir; cümle tavanı (en fazla 3 cilt) burada da uygulanır. */
+  function ciltOzeti(){
+    try{
+      if(!window.__oneri || typeof window.__oneri.eksikSeriler !== 'function') return null;
+      const liste = window.__oneri.eksikSeriler();
+      if(!liste.length) return null;
+      const sec = liste.slice().sort((a, b) => a.eksik.length - b.eksik.length
+        || String(a.seri).localeCompare(String(b.seri), 'tr'))[0];
+      return { seri: sec.seri, gosterilen: sec.eksik.slice(0, 3),
+        kalan: Math.max(0, sec.eksik.length - 3) };
+    }catch(e){ return null; }
+  }
+  /* parca: bitmiş + özetli kitapların metinlerinden bildirimlik paragraf havuzu.
+     Ontolojisi olan kitapta ontoloji tercih edilir (daha damıtılmış metin).
+     Havuz SW'ye özetle taşınır; SW gösterirken geçmişe yazar, burada 90 günlük
+     geçmiş elenerek havuz kurulur (çifte süzgeç: uygulama açılmasa da SW kendi
+     süzer). Kitaplar arası çeşitlilik round-robin ile sağlanır. */
+  function parcala(metin){
+    const ham = String(metin || '').split(/\n\s*\n/);
+    const cikti = [];
+    ham.forEach((p, i) => {
+      const t = p.replace(/\*\*|__|\*/g, '').replace(/\s+/g, ' ').trim();
+      if(t.length < PARCA_MIN || t.length > PARCA_MAX) return;   // kısa/uzun
+      if(/:\s*$/.test(t)) return;                                 // "BAĞLAM:" gibi başlık
+      const harfler = t.match(/\p{L}/gu) || [];
+      const buyukler = t.match(/\p{Lu}/gu) || [];
+      if(harfler.length && buyukler.length / harfler.length > 0.6) return;  // BÜYÜK HARF satırı
+      cikti.push({ i, metin: t });
+    });
+    return cikti;
+  }
+  async function parcaOzeti(){
+    try{
+      if(!window.__ozet || typeof window.__ozet.oku !== 'function') return null;
+      if(typeof window.__ozet.hazirBekle === 'function'){
+        try{ await window.__ozet.hazirBekle(); }catch(e){ /* yükleme düştü — eldeki bellekle devam */ }
+      }
+      let gecmis = [];
+      try{ gecmis = (await parcaGecmisOku()) || []; }catch(e){ gecmis = []; }
+      const bugun = gunIso();
+      const yasak = new Set((Array.isArray(gecmis) ? gecmis : [])
+        .filter(g => g && g.a && g.g && gunFark(g.g, bugun) < PARCA_TEKRAR_GUN)
+        .map(g => g.a));
+      const kitaplar = [];
+      (veri.kitaplar || []).forEach(k => {
+        if(!k || k.durum !== 'bitti') return;
+        const onto = window.__ozet.okuOnto(k.id);
+        const metin = onto || window.__ozet.oku(k.id);
+        if(!metin) return;
+        const kay = onto ? 'o' : 'm';
+        const uygun = parcala(metin).filter(p => !yasak.has(k.id + ':' + kay + ':' + p.i));
+        if(uygun.length) kitaplar.push({ k, kay, uygun });
+      });
+      const havuz = [];
+      for(let tur = 0; havuz.length < PARCA_HAVUZ; tur++){
+        let eklendi = false;
+        for(const a of kitaplar){
+          if(tur < a.uygun.length && havuz.length < PARCA_HAVUZ){
+            havuz.push({ k: a.k.id, ad: a.k.ad, kay: a.kay,
+              i: a.uygun[tur].i, metin: a.uygun[tur].metin });
+            eklendi = true;
+          }
+        }
+        if(!eklendi) break;
+      }
+      return havuz.length ? { havuz } : null;
+    }catch(e){ return null; }
+  }
 
   /* ---------- tazeleme (debounce'lu) ---------- */
   let tazeleZaman = null;
@@ -227,11 +433,22 @@
       okumaSonGun: (t.okuma && o.okuma) ? o.okuma.sonGun : null,
       oneriGun: (t.oneri && o.oneri) ? a.oneriGun : null,
       oneriVar: !!(t.oneri && o.oneri),
-      tempoGeride: !!(t.tempo && o.tempo && o.tempo.geride)
+      tempoGeride: !!(t.tempo && o.tempo && o.tempo.geride),
+      /* v88 — yine yalnız GÜN ve BAYRAK; kitap adı/metin/sayfa YOK.
+         hedefGun/gecenYilGun: bayrağın HANGİ güne ait olduğu — sunucu yalnız
+         o gün ateşler, bayat bayrak ertesi günlere taşmaz. */
+      gunlukVar: !!(t.gunluk && o.gunluk),
+      yarimSonGun: (t.yarim && o.yarim) ? o.yarim.sonGun : null,
+      hedefGeride: !!(t.hedef && o.hedef && o.hedef.geride),
+      hedefGun: (t.hedef && o.hedef && o.hedef.geride) ? o.hedef.gun : null,
+      gecenYilGun: (t.gecenYil && o.gecenYil) ? o.gecenYil.gun : null,
+      parcaVar: !!(t.parca && o.parca && o.parca.havuz && o.parca.havuz.length),
+      bagVar: !!(t.bag && o.bag),
+      ciltVar: !!(t.cilt && o.cilt)
     };
   }
   async function tazele(){
-    const o = ozetHesapla();
+    const o = await ozetTam();
     try{ await ozetYazIdb(o); }catch(e){ window._iz && window._iz('ozetYazIdb', e); }
     const a = ayarYukle();
     const ayna = aynaOlustur(o, a);
@@ -313,7 +530,7 @@
         });
       }
       const a = ayarYukle();
-      const o = ozetHesapla();
+      const o = await ozetTam();
       /* İLK kayıtta aynayı burada üretip GÖNDERİYORUZ: tazele() henüz
          a.acik=false gördüğü için senkron etmezdi ve abone, ilk gün tetiksiz
          kalırdı (yalnız vade giderdi). */
@@ -469,7 +686,10 @@
      bunu AÇIKÇA söyler — v62'nin "doğru ama sessiz davranış arızadan ayırt
      edilemez" dersi. */
   const TETIK_AD = { alinti: 'Alıntı tekrarı', okuma: 'Okuma hatırlatması',
-    oneri: 'Haftalık öneri', tempo: 'Yıl hedefi temposu' };
+    oneri: 'Haftalık öneri', tempo: 'Yıl hedefi temposu',
+    gunluk: 'Günlük okuma', yarim: 'Yarım kalan kitap', hedef: 'Günlük sayfa hedefi',
+    gecenYil: 'Geçen yıl bugün', parca: 'Özet parçası', bag: 'Fikir bağlantısı',
+    cilt: 'Eksik cilt' };
   function tetikNotu(tetik, o){
     if(tetik === 'alinti') return (o.vadeler && o.vadeler.length)
       ? '' : 'Kuyrukta alıntı yok — bu tetik sessiz kalır.';
@@ -480,6 +700,21 @@
     if(tetik === 'tempo') return o.tempo
       ? (o.tempo.geride ? '' : 'Temponuz hedefin gerisinde değil — sessiz kalır.')
       : 'Yıl hedefi koymadın — bu tetik sessiz kalır.';
+    if(tetik === 'gunluk') return o.gunluk
+      ? '' : 'Şu an "okunuyor" kitabın yok — bu tetik sessiz kalır.';
+    if(tetik === 'yarim') return o.yarim
+      ? '' : 'Sayfa ilerlemesi kaydedilmiş "okunuyor" kitabın yok — bu tetik sessiz kalır.';
+    if(tetik === 'hedef') return o.hedef
+      ? (o.hedef.geride ? '' : 'Bugün günlük payını doldurdun — sessiz kalır.')
+      : 'Sayfa hedefi koymadın (Rakamlar ▸ Sayfa hedefi) — bu tetik sessiz kalır.';
+    if(tetik === 'gecenYil') return o.gecenYil
+      ? '' : 'Geçmiş yıllara ait tarihli bitiş yok — bu tetik sessiz kalır.';
+    if(tetik === 'parca') return (o.parca && o.parca.havuz && o.parca.havuz.length)
+      ? '' : 'Bitmiş ve özetli kitap yok — bu tetik sessiz kalır.';
+    if(tetik === 'bag') return o.bag
+      ? '' : 'Farklı kitaplarda ortak fikir etiketi yok — bu tetik sessiz kalır.';
+    if(tetik === 'cilt') return o.cilt
+      ? '' : 'Eksik cildi olan seri yok — bu tetik sessiz kalır.';
     return '';
   }
   async function tetikleriCiz(){
@@ -600,7 +835,10 @@
   else baslat();
 
   /* test kancaları */
-  window.__bildirim = { ozetHesapla, tazele, ozetOku, ayarYukle, ayarKaydet, kirp,
+  window.__bildirim = { ozetHesapla, ozetTam, tazele, ozetOku, ayarYukle, ayarKaydet, kirp,
     destekVar, iosTarayici, durumYaz, DB_AD, MAGAZA, AYAR_ANAHTAR, SUNUCU, VAPID_ACIK,
-    aynaOlustur, aynaOku, TETIKLER, VARSAYILAN_ONERI_GUN };
+    aynaOlustur, aynaOku, TETIKLER, VARSAYILAN_ONERI_GUN,
+    parcala, parcaOzeti, parcaGecmisOku, gunlukOzeti, yarimOzeti, hedefOzeti,
+    gecenYilOzeti, bagOzeti, ciltOzeti,
+    YARIM_ESIK, PARCA_MIN, PARCA_MAX, PARCA_TEKRAR_GUN, PARCA_HAVUZ };
 })();

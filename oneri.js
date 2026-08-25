@@ -414,8 +414,15 @@
         if(!s.ciltler.has(i)) eksik.push(i);
       const bitenler = [...s.bitenler].sort((x, y) => x - y);
       if(!eksik.length || !bitenler.length) continue;
+      /* TAVAN (denetim bulgusu): eksik listesinde sınır yoktu — hatalı bir
+         ciltNo (ör. 2023) girilirse cümle binlerce elemanlı kuruluyordu.
+         En fazla 3 cilt yazılır, kalanı sayıyla söylenir. `eksik` dizisinin
+         kendisi TAM kalır (detay ekranı/keşfet kendi kotasını uygular). */
+      const gosterilen = eksik.slice(0, 3);
+      const kalanCilt = eksik.length - gosterilen.length;
       sonuc.push({ seri: s.seri, yazar: s.yazar, eksik,
-        cumle: s.seri + ' serisinin ' + eksik.join(' ve ') + '. cildi eksik — ' +
+        cumle: s.seri + ' serisinin ' + gosterilen.join(' ve ') + '. cildi eksik' +
+          (kalanCilt > 0 ? ' (ve ' + kalanCilt + ' cilt daha)' : '') + ' — ' +
           bitenler.join(' ve ') + '. cildi bitirdin' });
     }
     return sonuc;

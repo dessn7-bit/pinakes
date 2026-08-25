@@ -559,4 +559,35 @@ test.describe('G24 gerekçe tekilleştirme (v48)', () => {
     nedenler.forEach(n => expect(n.trim().length).toBeGreaterThan(0));
     expect(new Set(nedenler).size).toBe(nedenler.length);
   });
+
+  /* ===== v88 EKSİK CİLT TAVANI (denetim bulgusu + bildirim tetiği önkoşulu) =====
+     eksikSeriler cümlesinde tavan yoktu: ciltNo'ya yanlışlıkla 2023 girilirse
+     binlerce elemanlı cümle kuruluyordu. Artık en fazla 3 cilt yazılır, kalanı
+     "(ve N cilt daha)" ile söylenir; `eksik` dizisi TAM kalır.
+     (Mutasyon E: slice(0,3) kaldırılır → "üç cilt + sayı" vakası kırmızı.) */
+  test('v88 eksik cilt TAVANI: ciltNo 2023 girilse bile cümle 3 cilt + "ve N cilt daha" ile sınırlı', async ({ page }) => {
+    await tohumla(page, [
+      bitmis({ ad: 'Seri Cilt 1', seri: 'Kazim', ciltNo: 1, puan: 8 }),
+      okunacak({ ad: 'Seri Cilt 2023', seri: 'Kazim', ciltNo: 2023 })
+    ]);
+    await rafAc(page);
+    const s = await page.evaluate(() => window.__oneri.eksikSeriler());
+    expect(s.length).toBe(1);
+    expect(s[0].eksik.length).toBe(2021);                 // dizi TAM (2..2022)
+    expect(s[0].cumle).toContain('2 ve 3 ve 4. cildi eksik (ve 2018 cilt daha)');
+    expect(s[0].cumle).toContain('1. cildi bitirdin');
+    expect(s[0].cumle.length).toBeLessThan(120);          // cümle patlamıyor
+  });
+
+  test('v88 eksik cilt: 3 ve daha az eksikte cümle ESKİSİ gibi (tavan eki yok)', async ({ page }) => {
+    await tohumla(page, [
+      bitmis({ ad: 'Vakif 1', seri: 'Vakif', ciltNo: 1, puan: 8 }),
+      okunacak({ ad: 'Vakif 3', seri: 'Vakif', ciltNo: 3 })
+    ]);
+    await rafAc(page);
+    const s = await page.evaluate(() => window.__oneri.eksikSeriler());
+    expect(s[0].cumle).toBe('Vakif serisinin 2. cildi eksik — 1. cildi bitirdin');
+    expect(s[0].cumle).not.toContain('cilt daha');
+  });
 });
+
