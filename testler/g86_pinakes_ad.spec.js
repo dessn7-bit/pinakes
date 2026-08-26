@@ -97,6 +97,54 @@ test.describe('G86 Pinakes — görünen ad', () => {
     expect(await page.evaluate(() => veri.kitaplar.length)).toBe(2);
   });
 
+  test('(f) header markası: app-title "Pinakes"; iki tonlu span deseni korunmuş (v90 — v89 kaçağı)', async ({ page }) => {
+    await rafAc(page);
+    /* v89 DERSİ: Kitap<span>lık</span> kaynak grep'inde "Kitaplık" olarak
+       görünmüyordu; textContent parçaları BİRLEŞTİRİR — iddia tam ada. */
+    await expect(page.locator('header .app-title')).toHaveText('Pinakes');
+    await expect(page.locator('header .app-title span'), 'iki tonlu kesme yaşıyor').toHaveText('es');
+  });
+
+  test('(g) GÖRSEL TARAMA: render edilmiş hiçbir yüzeyde marka "Kitaplık" kalmadı (metin + nitelikler)', async ({ page }) => {
+    await tohumla(page, [bitmis({ ad: 'Tarama Kitabı', ozet: 'Tarama özeti.', ozetG: 100 })]);
+    await rafAc(page);
+    await page.evaluate(() => window.__ozet.hazirBekle());
+    const bulgular = [];
+    const tara = async yuzey => {
+      const b = await page.evaluate(() => {
+        /* Marka biçimleri: "Kitaplık" / "KİTAPLIK". "kitap", "KİTAPLAR" gibi
+           genel sözcükler bilerek DIŞARIDA. innerText (textContent DEĞİL):
+           body'deki <script> kaynağını ve gizli panelleri katmaz, KULLANICININ
+           GÖRDÜĞÜNÜ verir; etiketle bölünmüş metni (Kitap<span>lık</span> —
+           v89'un grep'e yakalanmayan kaçağı) yine birleştirir. */
+        const marka = /Kitaplık|K[İI]TAPLIK/;
+        const sonuc = [];
+        if(marka.test(document.body.innerText)) sonuc.push('görünen metin');
+        for(const el of document.querySelectorAll('[aria-label],[title],[placeholder],[alt]'))
+          for(const n of ['aria-label', 'title', 'placeholder', 'alt']){
+            const d = el.getAttribute(n);
+            if(d && marka.test(d)) sonuc.push(n + '="' + d + '"');
+          }
+        return sonuc;
+      });
+      bulgular.push(...b.map(x => yuzey + ' → ' + x));
+    };
+    await tara('Kütüphane');
+    await detayAc(page, 'Tarama Kitabı');
+    await tara('detay');
+    await page.click('#ortuDetay .sheet-kapat');
+    await page.click('.fab[data-act="yeni"]');
+    await tara('form');
+    await page.click('[data-act="form-kapat"]');
+    for(const sekme of ['ana', 'kesfet', 'alinti', 'ist']){
+      await page.click('nav [data-act="sekme"][data-v="' + sekme + '"]');
+      await tara(sekme);
+    }
+    await ayarlarAc(page);   // Hakkında dahil en son; kapatma gerekmez
+    await tara('Ayarlar');
+    expect(bulgular, 'render edilmiş yüzeylerde marka kalıntısı').toEqual([]);
+  });
+
   test('(e) iç kimlikler kaynakta AYNEN: sw önbellek öneki, DEPO sabiti, senkron/worker adresleri', async () => {
     const kok = path.join(__dirname, '..');
     const sw = fs.readFileSync(path.join(kok, 'sw.js'), 'utf8');
