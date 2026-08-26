@@ -45,7 +45,7 @@ function _iz(yer, e){ if(window.__KK_IZ) console.warn('[kk]', yer, e); }
   }catch(e){ /* özellik yok (eski tarayıcı) — sessiz geçiş kasıtlı */ }
 })();
 </script>
-<title>Kitaplık</title>
+<title>Pinakes</title>
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon-192.png">
 <link rel="apple-touch-icon" href="./icon-192.png">
@@ -555,6 +555,13 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
 .ay-baslik{font-family:var(--serif);font-size:1rem;font-weight:600;margin:18px 0 4px}
 .ay-bolum-bas + .ay-baslik,.ay-yuva > :first-child .ay-baslik{margin-top:0}
 .ay-not{font-size:.85rem;color:var(--muted);line-height:1.55;margin-bottom:10px}
+/* Hakkında dipnotu (hk-, v89) — .ay-bolum/.kicker BİLİNÇLİ kullanılmadı:
+   g48 sekiz bölüm id'sini ve kicker sayısını kilitler (v63/v81 emsali).
+   Görsel dil kicker'ın kopyası, sınıf ayrı. */
+.hk-blok{padding:14px 0 4px}
+.hk-kicker{font-family:var(--sans);font-size:.66rem;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--brass);display:block;margin-bottom:8px}
+.hk-blok p{font-size:.8rem;color:var(--muted2);line-height:1.55;margin:0 0 8px}
 .ay-eylem{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
 .ay-eylem .btn{width:auto}
 /* TEHLİKELİ BÖLGE — Ciltli'de dolgu yok, ayrım ÜÇ eksende birden kuruluyor:
@@ -682,6 +689,14 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
   position:relative;text-decoration:underline;text-underline-offset:3px;
   text-decoration-color:var(--muted2)}
 .oz-sessiz::after,.onto-sessiz::after,.ts-sessiz::after{content:'';position:absolute;inset:-8px}
+/* Özet/Ontoloji sekme şeridi (ms-, v89) — kicker dilinin sekme hâli: seçili
+   sekme pirinç + alt çizgi (nav-btn etiket deseni), diğeri soluk. 44px dokunma
+   hedefi; odak halkası global :focus-visible kuralından (v85) gelir. */
+.ms-serit{display:flex;gap:18px;align-items:center}
+.ms-sekme{background:none;border:none;padding:0 2px;min-height:44px;cursor:pointer;
+  font-family:var(--sans);font-size:.66rem;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted2);border-bottom:1px solid transparent}
+.ms-sekme.ms-secili{color:var(--brass);border-bottom-color:var(--brass)}
 /* Taslak şeridi (v82): mini-not tonunda sakin bir satır — kart/dolgu yok */
 .ts-serit{padding-top:2px}
 .ts-govde{margin-top:8px}
@@ -1301,6 +1316,16 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
           <button class="btn btn-tehlike" data-act="tumunu-sil">Kütüphaneyi boşalt</button>
         </div>
       </details>
+      <!-- Hakkında (v89): uygulamanın görünen adı Pinakes oldu — adın kaynağı
+           burada bir kez anlatılır. hk- ad alanı; g48 kilitleri bozulmaz. -->
+      <div class="hk-blok" id="hkHakkinda">
+        <span class="hk-kicker">Hakkında</span>
+        <p><b>Pinakes</b> — okuduklarının kataloğu ve ontolojisi.</p>
+        <p>Adını, Kallimakhos'un MÖ 245 dolaylarında İskenderiye Kütüphanesi için hazırladığı
+           katalog <i>Pinakes</i>'ten alır: 120 papirüs rulosu, Batı'nın ilk kütüphane kataloğu.
+           Yalnızca bir liste değildi — yazar yaşamöyküleri ve eser değerlendirmeleri içeren
+           eleştirel bir katalogdu. Bugün kayıptır.</p>
+      </div>
     </div>
     </div>
 </div>
@@ -1579,7 +1604,7 @@ let veri = depoYukle();
    kitapNormalize sahiplik'i 'istek' değilse 'sahip'e sabitliyor. */
 let durum = { filtre:'hepsi', arama:'', etiket:'', sirala:'bitis', sekme:'ana',
   formDuzenId:null, formDurum:'okunacak', formPuan:null, formKapak:null,
-  detayId:null, notTip:'not', alintiArama:'', araTip:'ad',
+  detayId:null, notTip:'not', alintiArama:'', araTip:'ad', metinSekme:'ozet',
   gelenKitapId:null, gelenTip:'alinti', sahiplikFiltre:'sahip' };
 
 /* ---------- sıralama tercihi (v74) ----------
@@ -2935,12 +2960,112 @@ function formKaydet(){
 }
 
 /* ---------- detay ---------- */
+/* ---------- ÖZET + ONTOLOJİ bölümü (M2 + v81; v89'da SEKME) ----------
+   Kitabın bütününe dair iki kullanıcı metni TEK bölgede. v89 KARARI: bloklar
+   alt alta değil SEKME — metinler uzun (ort. özet ~660 / ontoloji ~410 kelime,
+   en uzunu 1164), alt alta dizilince detay sayfası aşırı uzuyordu. Görünürlük:
+   - ikisi de boş → şerit YOK, tek "+ Özetini yaz" ghost satırı (eski davranış);
+   - yalnız özet → şerit YOK, özet doğrudan + "+ Ontoloji yaz" ghost'u KALIR
+     (ontoloji yazmanın tek yolu); 244 kitabın 143'ünde ontoloji yok — boş
+     "Ontoloji" sekmesi durmasın diye şerit çizilmez;
+   - ontoloji varsa (yalnız-ontoloji dahil) → [Özetin][Ontoloji] şeridi + TEK
+     panel; varsayılan seçim detayAc giriş dalında kurulur.
+   600 KIRPMA KALKTI: sekmenin kendi alanı var, metin TAM gösterilir
+   (durum.ozetAcik/ontoAcik bayrakları ve oz-devam/onto-devam eylemleri v89'da
+   silindi). Düzenleme akışı ve data-act adları (oz-*, onto-*) DEĞİŞMEDİ;
+   düzenleme açıkken sekme geçişi dispatcher'da ENGELLİ (ms-sekme vakası).
+   Panel kimlikleri dOzetBlok/dOntoBlok korunur; "Özetin" adlandırma kararı ve
+   maxlength 10000 (240×10.000 uçta kota %56 ölçümü) M2'den aynen taşındı.
+   Üst-düzey fonksiyon (detayAc'a gömülü değil): ms-sekme geçişi tam detayAc
+   çizimi yapmadan YALNIZ bu bloğu tazeler — sheet scroll'u oynamaz. */
+function metinBolumHtml(k){
+  // v80: metin bellek dizininden; k.ozet yalnız göç-öncesi mirasta dolu olabilir
+  const ozM = window.__ozet.oku(k.id) || String(k.ozet || '');
+  const onM = window.__ozet.okuOnto(k.id);
+  const ozDuzen = durum.ozetDuzenle === k.id, onDuzen = durum.ontoDuzenle === k.id;
+  const ozYukleniyor = k.ozetVar && !ozM && !window.__ozet.hazir && !ozDuzen;
+  const ozEditor = () => `<textarea id="ozMetin" rows="7" maxlength="10000" style="min-height:140px"
+        placeholder="Bu kitap sana ne bıraktı? Ana fikri, kendi değerlendirmen…">${esc(ozM)}</textarea>
+      <div class="oz-eylem">
+        <button class="btn btn-cerceve btn-kucuk" data-act="oz-kaydet">Kaydet</button>
+        <button class="oz-sessiz" data-act="oz-vazgec">Vazgeç</button>
+      </div>
+      ${ozM ? '<div class="mini-not">Metni boşaltıp kaydedersen özet silinir.</div>' : ''}`;
+  const onEditor = () => `<textarea id="ontoMetin" rows="7" maxlength="10000" style="min-height:140px"
+        placeholder="Kitabın ontolojisi…">${esc(onM)}</textarea>
+      <div class="onto-eylem">
+        <button class="btn btn-cerceve btn-kucuk" data-act="onto-kaydet">Kaydet</button>
+        <button class="onto-sessiz" data-act="onto-vazgec">Vazgeç</button>
+      </div>
+      ${onM ? '<div class="mini-not">Metni boşaltıp kaydedersen ontoloji silinir.</div>' : ''}`;
+
+  /* ŞERİTSİZ hâller: ontoloji yok ve düzenlenmiyor — v81 markup'ı aynen */
+  if(!onM && !onDuzen){
+    if(ozDuzen)
+      return `<div class="detay-satir" id="dOzetBlok">
+        <div class="d-bolum-bas"><span class="kicker">Özetin</span></div>
+        ${ozEditor()}
+      </div>`;
+    if(ozYukleniyor)
+      return `<div class="detay-satir" id="dOzetBlok">
+        <div class="d-bolum-bas"><span class="kicker">Özetin</span></div>
+        <div class="oz-metin" style="color:var(--muted)">Özet yükleniyor…</div>
+      </div>`;
+    if(!ozM)
+      return `<div class="detay-satir oz-bos"><button class="oz-ghost" data-act="oz-ac">+ Özetini yaz</button></div>`;
+    return `<div class="detay-satir" id="dOzetBlok">
+      <div class="d-bolum-bas"><span class="kicker">Özetin</span>
+        <button class="oz-ghost" data-act="oz-ac">Düzenle</button></div>
+      <div class="oz-metin">${esc(ozM)}</div>
+    </div>
+    <div class="detay-satir onto-bos"><button class="onto-ghost" data-act="onto-ac">+ Ontoloji yaz</button></div>`;
+  }
+
+  /* ŞERİT: seçim düzenleme sürerken düzenlenen alana sabitlenir (oz-ac/onto-ac
+     durum.metinSekme'yi de kurar — bu satır çifte emniyet). */
+  const sekme = onDuzen ? 'onto' : ozDuzen ? 'ozet' : (durum.metinSekme === 'onto' ? 'onto' : 'ozet');
+  const tabBtn = (tv, ad) => {
+    const secili = sekme === tv;
+    return `<button class="ms-sekme${secili ? ' ms-secili' : ''}" id="${tv === 'onto' ? 'msSekmeOnto' : 'msSekmeOzet'}"
+      role="tab" aria-selected="${secili}"${secili ? ` aria-controls="${tv === 'onto' ? 'dOntoBlok' : 'dOzetBlok'}"` : ''}
+      data-act="ms-sekme" data-v="${tv}">${ad}</button>`;
+  };
+  let panel, duzenle = '';
+  if(sekme === 'ozet'){
+    panel = ozDuzen ? ozEditor()
+      : ozYukleniyor ? '<div class="oz-metin" style="color:var(--muted)">Özet yükleniyor…</div>'
+      : ozM ? `<div class="oz-metin">${esc(ozM)}</div>`
+      : '<button class="oz-ghost" data-act="oz-ac">+ Özetini yaz</button>';
+    if(!ozDuzen && ozM) duzenle = '<button class="oz-ghost" data-act="oz-ac">Düzenle</button>';
+  }else{
+    panel = onDuzen ? onEditor() : `<div class="onto-metin">${esc(onM)}</div>`;
+    if(!onDuzen) duzenle = '<button class="onto-ghost" data-act="onto-ac">Düzenle</button>';
+  }
+  return `<div class="detay-satir" id="dMetinBlok">
+    <div class="d-bolum-bas">
+      <div class="ms-serit" role="tablist" aria-label="Özet ve ontoloji">
+        ${tabBtn('ozet', 'Özetin')}${tabBtn('onto', 'Ontoloji')}
+      </div>
+      ${duzenle}
+    </div>
+    <div id="${sekme === 'onto' ? 'dOntoBlok' : 'dOzetBlok'}" role="tabpanel"
+      aria-labelledby="${sekme === 'onto' ? 'msSekmeOnto' : 'msSekmeOzet'}">${panel}</div>
+  </div>`;
+}
+
 function detayAc(id){
   const k = kitapBul(id);
   if(!k) return;
-  // özet/ontoloji/taslak bölümü geçici durumları kitaba bağlı: başka kitaba geçişte sıfırlanır
-  if(durum.detayId !== id){ durum.ozetDuzenle = null; durum.ozetAcik = false;
-    durum.ontoDuzenle = null; durum.ontoAcik = false; durum.taslakAcik = null; }
+  /* özet/ontoloji/taslak geçici durumları kitaba bağlı: her TAZE açılışta
+     sıfırlanır (detay-kapat detayId'yi null yapar, aynı kitabı yeniden açmak da
+     bu daldan geçer). v89: sekme seçimi de burada kurulur — önceki kitabın
+     seçimi taşınmaz; yalnız-ontoloji kitabı 'onto' ile açılır (boş Özet
+     paneliyle açılmasın). Eylem-içi detayAc çağrıları (oz-kaydet vb.) aynı
+     id'yle gelir, seçime DOKUNMAZ. */
+  if(durum.detayId !== id){ durum.ozetDuzenle = null; durum.ontoDuzenle = null;
+    durum.taslakAcik = null;
+    durum.metinSekme = (window.__ozet.okuOnto(id) && !(window.__ozet.oku(id) || k.ozet))
+      ? 'onto' : 'ozet'; }
   durum.detayId = id;
   const kap = document.getElementById('detayIcerik');
   const rSinif = { okunuyor:'r-okunuyor', bitti:'r-bitti', okunacak:'r-okunacak', yarim:'r-yarim' }[k.durum];
@@ -2959,84 +3084,6 @@ function detayAc(id){
         `<button class="puan-btn ${k.puan === i+1 ? 'secili' : ''}" data-act="d-puan" data-v="${i+1}">${i+1}</button>`).join('')}</div>
       ${k.puan ? `<button class="d-sessiz" data-act="d-puan-sil">Puanı kaldır</button>` : ''}
     </div>`;
-
-  /* ÖZET bölümü (M2) — kitabın bütününe dair kullanıcı değerlendirmesi; alıntı/
-     nottan görsel olarak da AYRI: kutu yok, italik yok (italik = alıntı imzası),
-     düz serif metin + kıl payı düzen. Doğrudan-puanlama deseninin metin hali:
-     form AÇILMAZ, detay içinde yazılır. Adlandırma KARARI: "Özetin" — Kaan'ın
-     kendi sözcüğü ("bütün kitapların özeti") + uygulamanın kişisel-ton dili
-     (Puanın, Defterin, Rafından emsalleri); "Değerlendirmen" puanla karışırdı.
-     BOŞKEN kicker'lı bölüm ÜRETİLMEZ (boş bölüm kuralı) — tek ince ghost satır.
-     UZUN metin KARARI: >600 karakter katlanır ("Devamını göster") — özet alt
-     bölümleri (notlar, seri) sayfanın dibine gömmesin; 600, iki dolgun
-     paragraf ≈ ekranda ~yarım sayfa. Sınır 10.000 karakter YALNIZ arayüzde
-     (maxlength) — depo bütçesi ölçümü: 240×10.000 uçta bile kota %56. */
-  const ozetHtml = () => {
-    // v80: metin bellek dizininden (IDB açılış yüklemesi); k.ozet yalnız
-    // göç-öncesi mirasta dolu olabilir — o pencerede de metni gösterelim
-    const oMetin = window.__ozet.oku(k.id) || String(k.ozet || '');
-    if(k.ozetVar && !oMetin && !window.__ozet.hazir && durum.ozetDuzenle !== k.id)
-      return `<div class="detay-satir" id="dOzetBlok">
-        <div class="d-bolum-bas"><span class="kicker">Özetin</span></div>
-        <div class="oz-metin" style="color:var(--muted)">Özet yükleniyor…</div>
-      </div>`;
-    if(durum.ozetDuzenle === k.id){
-      return `<div class="detay-satir" id="dOzetBlok">
-        <div class="d-bolum-bas"><span class="kicker">Özetin</span></div>
-        <textarea id="ozMetin" rows="7" maxlength="10000" style="min-height:140px"
-          placeholder="Bu kitap sana ne bıraktı? Ana fikri, kendi değerlendirmen…">${esc(oMetin)}</textarea>
-        <div class="oz-eylem">
-          <button class="btn btn-cerceve btn-kucuk" data-act="oz-kaydet">Kaydet</button>
-          <button class="oz-sessiz" data-act="oz-vazgec">Vazgeç</button>
-        </div>
-        ${oMetin ? '<div class="mini-not">Metni boşaltıp kaydedersen özet silinir.</div>' : ''}
-      </div>`;
-    }
-    if(!oMetin)
-      return `<div class="detay-satir oz-bos"><button class="oz-ghost" data-act="oz-ac">+ Özetini yaz</button></div>`;
-    const uzun = oMetin.length > 600 && !durum.ozetAcik;
-    return `<div class="detay-satir" id="dOzetBlok">
-      <div class="d-bolum-bas"><span class="kicker">Özetin</span>
-        <button class="oz-ghost" data-act="oz-ac">Düzenle</button></div>
-      <div class="oz-metin">${esc(uzun ? oMetin.slice(0, 600) : oMetin)}${uzun ? '…' : ''}</div>
-      ${uzun ? '<button class="oz-sessiz" data-act="oz-devam">Devamını göster</button>' : ''}
-    </div>`;
-  };
-
-  /* ONTOLOJİ bölümü (v81) — özet bölümünün İKİZİ: ayrı saklanır (kk_ozet_v1
-     kaydında o alanı), ayrı görünür, ayrı düzenlenir; ayrı bayraklar
-     (ontoDuzenle/ontoAcik) ve onto- ad alanı (sınıf/act yeniden kullanılmaz
-     kuralı). BOŞ ontoloji: özet DOLUYSA tek ghost satır, özet de BOŞSA hiç
-     çizilmez — 243 kitabın 143'ünde ontoloji yok, boş düğme kalabalığı
-     olmasın. 600 kırpma + maxlength 10000 özetle birebir aynı. */
-  const ontoHtml = () => {
-    const oMetin = window.__ozet.okuOnto(k.id);
-    if(durum.ontoDuzenle === k.id){
-      return `<div class="detay-satir" id="dOntoBlok">
-        <div class="d-bolum-bas"><span class="kicker">Ontoloji</span></div>
-        <textarea id="ontoMetin" rows="7" maxlength="10000" style="min-height:140px"
-          placeholder="Kitabın ontolojisi…">${esc(oMetin)}</textarea>
-        <div class="onto-eylem">
-          <button class="btn btn-cerceve btn-kucuk" data-act="onto-kaydet">Kaydet</button>
-          <button class="onto-sessiz" data-act="onto-vazgec">Vazgeç</button>
-        </div>
-        ${oMetin ? '<div class="mini-not">Metni boşaltıp kaydedersen ontoloji silinir.</div>' : ''}
-      </div>`;
-    }
-    if(!oMetin){
-      const ozetDolu = !!(window.__ozet.oku(k.id) || k.ozet);
-      return ozetDolu
-        ? `<div class="detay-satir onto-bos"><button class="onto-ghost" data-act="onto-ac">+ Ontoloji yaz</button></div>`
-        : '';
-    }
-    const uzun = oMetin.length > 600 && !durum.ontoAcik;
-    return `<div class="detay-satir" id="dOntoBlok">
-      <div class="d-bolum-bas"><span class="kicker">Ontoloji</span>
-        <button class="onto-ghost" data-act="onto-ac">Düzenle</button></div>
-      <div class="onto-metin">${esc(uzun ? oMetin.slice(0, 600) : oMetin)}${uzun ? '…' : ''}</div>
-      ${uzun ? '<button class="onto-sessiz" data-act="onto-devam">Devamını göster</button>' : ''}
-    </div>`;
-  };
 
   /* TASLAK şeridi (v82; metin v84'te modelden KAYNAĞA döndü) — özet bloğunun
      ÜSTÜNDE. Yalnız ÖZET BOŞKEN çizilir: özet doluyken "Özet olarak kaydet"
@@ -3226,7 +3273,7 @@ function detayAc(id){
     <div class="tutamac"></div>
     <button class="sheet-kapat" data-act="detay-kapat" aria-label="Kapat">✕</button>
     <div class="d-ust-satir">
-      <button class="d-geri" data-act="detay-kapat">‹ Kitaplık</button>
+      <button class="d-geri" data-act="detay-kapat">‹ Pinakes</button>
       <span class="d-durum-kicker">${DURUM_AD[k.durum]}</span>
     </div>
     <div class="detay-ust">
@@ -3251,7 +3298,7 @@ function detayAc(id){
     ${eylemHtml}
     ${kunyeHtml}
     ${etiketHtml}
-    ${taslakHtml()}${ozetHtml()}${ontoHtml()}
+    ${taslakHtml()}${metinBolumHtml(k)}
     <div class="detay-satir">
       <div class="d-bolum-bas"><span class="kicker">Notlar &amp; alıntılar</span><button class="oc-ghost" data-act="oc-baslat">${ikon('kamera')} Fotoğraftan</button></div>
       <div class="not-tip-sec">
@@ -3645,7 +3692,7 @@ function disaAktar(){
      olarak girer; iceAktar geri yükler. */
   dosyaIndir(JSON.stringify({ surum:2, tarih:new Date().toISOString(), ...veri,
       ozetler: window.__ozet.hepsiDisa() }, null, 2),
-    `kitaplik-yedek-${bugun()}.json`, 'application/json');
+    `pinakes-yedek-${bugun()}.json`, 'application/json');
   toast('Yedek indirildi');
 }
 function csvAktar(){
@@ -3666,7 +3713,7 @@ function csvAktar(){
     b(window.__ozet.oku(k.id) || k.ozet),  // v80: metin bellek dizininden (miras alan yedek)
     b(window.__ozet.okuOnto(k.id))         // v81: Ontoloji sütunu — Özet gibi tam metin, kırpma yok
   ].join(';')));
-  dosyaIndir('\uFEFF' + sat.join('\r\n'), `kitaplik-${bugun()}.csv`, 'text/csv;charset=utf-8');
+  dosyaIndir('\uFEFF' + sat.join('\r\n'), `pinakes-${bugun()}.csv`, 'text/csv;charset=utf-8');
   toast('CSV indirildi');
 }
 /* Alıntı/not dışa aktarımı — Markdown.
@@ -3711,7 +3758,7 @@ function notlariMdUret(sadeceAlinti){
   const tarih = simdi.getDate() + ' ' + aylar[simdi.getMonth()] + ' ' + simdi.getFullYear();
   const sayim = [kitapSay + ' kitap', alintiSay + ' alıntı'];
   if(!sadeceAlinti){ sayim.push(notSay + ' not'); if(ozetSay) sayim.push(ozetSay + ' özet'); }
-  const bas = ['# Kitaplık — ' + (sadeceAlinti ? 'Alıntılar' : 'Alıntılar ve notlar'),
+  const bas = ['# Pinakes — ' + (sadeceAlinti ? 'Alıntılar' : 'Alıntılar ve notlar'),
     '', tarih + ' · ' + sayim.join(', '), ''];
   return bas.concat(bl).join('\n');
 }
@@ -3721,7 +3768,7 @@ function notlariMdAktar(sadeceAlinti){
     toast(sadeceAlinti ? 'Dışa aktarılacak alıntı yok' : 'Dışa aktarılacak alıntı veya not yok');
     return false;
   }
-  dosyaIndir(md, `kitaplik-${sadeceAlinti ? 'alintilar' : 'alinti-not'}-${bugun()}.md`,
+  dosyaIndir(md, `pinakes-${sadeceAlinti ? 'alintilar' : 'alinti-not'}-${bugun()}.md`,
     'text/markdown;charset=utf-8');
   toast(sadeceAlinti ? 'Alıntılar indirildi' : 'Alıntı ve notlar indirildi');
   return true;
@@ -3793,7 +3840,7 @@ function iceAktar(dosya){
       }
       depoKaydet(); hepsiniCiz();
       toast(eklendi ? `${eklendi} kitap geri yüklendi` : 'Yeni kitap yok — hepsi zaten kayıtlı');
-    }catch(e){ toast('Dosya okunamadı — geçerli bir Kitaplık yedeği değil'); }
+    }catch(e){ toast('Dosya okunamadı — geçerli bir Pinakes yedeği değil'); }
   };
   okuyucu.readAsText(dosya);
 }
@@ -4514,12 +4561,12 @@ document.addEventListener('click', e => {
        YALNIZ değer değiştiyse basılır (hedef-kaydet dersi: yalnız-eksikse-bas
        başka cihazın eskisini yenemiyordu). ozetG = alan damgası (senkron). */
     case 'oz-ac': {
+      durum.metinSekme = 'ozet';   // v89: şeritli kitapta düzenleme kendi sekmesinde açılır
       durum.ozetDuzenle = durum.detayId; detayAc(durum.detayId);
       const ta = document.getElementById('ozMetin');
       if(ta){ ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
       break; }
     case 'oz-vazgec': durum.ozetDuzenle = null; detayAc(durum.detayId); break;
-    case 'oz-devam': durum.ozetAcik = true; detayAc(durum.detayId); break;
     case 'oz-kaydet': {
       const k = kitapBul(durum.detayId);
       const ta = document.getElementById('ozMetin');
@@ -4546,12 +4593,37 @@ document.addEventListener('click', e => {
     /* Ontoloji eylemleri (v81) — özet eylemlerinin birebiri, ayrı act/bayrak
        adları. kaydetOnto m'yi KORUR, tek damgayı (ozetG kanalı) tazeler. */
     case 'onto-ac': {
+      durum.metinSekme = 'onto';   // v89: ghost'tan da Düzenle'den de Ontoloji sekmesine iner
       durum.ontoDuzenle = durum.detayId; detayAc(durum.detayId);
       const ta = document.getElementById('ontoMetin');
       if(ta){ ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
       break; }
     case 'onto-vazgec': durum.ontoDuzenle = null; detayAc(durum.detayId); break;
-    case 'onto-devam': durum.ontoAcik = true; detayAc(durum.detayId); break;
+    /* v89: özet/ontoloji sekme geçişi — YALNIZ metin bloğunu tazeler (tam
+       detayAc çizimi sheet scroll'unu oynatırdı; gereksinim "sayfayı
+       kaydırmadan yalnız o alan değişsin"). Düzenleme açıkken geçiş ENGELLİ
+       ("uyar ve geç" değil): kaydedilmemiş metin tek dokunuşla kaybolamaz,
+       Kaydet/Vazgeç zaten iki parmak uzağında. */
+    case 'ms-sekme': {
+      const hedef = v === 'onto' ? 'onto' : 'ozet';
+      if(hedef === durum.metinSekme) break;
+      if(durum.ozetDuzenle === durum.detayId || durum.ontoDuzenle === durum.detayId){
+        toast('Önce Kaydet ya da Vazgeç — yazdığın metin kaybolmasın'); break; }
+      durum.metinSekme = hedef;
+      const k = kitapBul(durum.detayId);
+      const blok = document.getElementById('dMetinBlok');
+      if(k && blok){
+        /* scroll anchoring panel boyu değişince sheet'i kaydırıyor (ölçüldü:
+           uzun panelde +49px) — scrollTop swap çevresinde elle korunur */
+        const kap = document.getElementById('detayIcerik');
+        const kayma = kap ? kap.scrollTop : 0;
+        blok.outerHTML = metinBolumHtml(k);
+        if(kap) kap.scrollTop = kayma;
+        // outerHTML eski düğmeyi yok etti — odak yeni seçili sekmeye, kaydırmadan
+        const yeni = document.getElementById(hedef === 'onto' ? 'msSekmeOnto' : 'msSekmeOzet');
+        if(yeni) yeni.focus({ preventScroll: true });
+      }
+      break; }
     case 'onto-kaydet': {
       const k = kitapBul(durum.detayId);
       const ta = document.getElementById('ontoMetin');

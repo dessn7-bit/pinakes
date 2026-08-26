@@ -24,7 +24,7 @@ test.describe('G10 yedek ve aktarım', () => {
       // Kota uyarı şeridinde de aynı eylem var (M5); Yedek panelindekini hedefle.
       page.click('#ortuAyar [data-act="disa-aktar"]')
     ]);
-    expect(indirme.suggestedFilename()).toMatch(/^kitaplik-yedek-.*\.json$/);
+    expect(indirme.suggestedFilename()).toMatch(/^pinakes-yedek-.*\.json$/);
     const icerik = JSON.parse(fs.readFileSync(await indirme.path(), 'utf8'));
     expect(icerik.surum).toBe(2);
     expect(Array.isArray(icerik.kitaplar)).toBe(true);
@@ -93,7 +93,7 @@ test.describe('G10 yedek ve aktarım', () => {
     // bozuk JSON
     await page.setInputFiles('#iceDosya',
       { name: 'bozuk.json', mimeType: 'application/json', buffer: Buffer.from('{{bozuk', 'utf8') });
-    await expect(page.locator('#toast')).toContainText('geçerli bir Kitaplık yedeği değil');
+    await expect(page.locator('#toast')).toContainText('geçerli bir Pinakes yedeği değil');
     // bozuk CSV (Goodreads başlıkları yok)
     await page.setInputFiles('#grDosya',
       { name: 'bozuk.csv', mimeType: 'text/csv', buffer: Buffer.from('a;b;c\n1;2;3', 'utf8') });

@@ -10,8 +10,9 @@
    - Özet yazımı (kaydet) o'yu KORUR; ontoloji yazımı (kaydetOnto) m'yi KORUR.
    - kaydetHam 4. parametre o: verilmezse mevcut o korunur (eski yedekler
      ontolojiyi silmesin).
-   - Detay: ontoloji bloğu özet bloğunun HEMEN ALTINDA; ikisi de boşsa HİÇ
-     çizilmez (boş düğme kalabalığı olmasın), özet doluysa tek ghost satır.
+   - Detay (v89 SEKME): ontoloji doluysa [Özetin][Ontoloji] şeridi + tek panel
+     (ayrıntılar g87'de); yalnız özet varken şerit YOK — ghost satır özet
+     bloğunun hemen altında; ikisi de boşsa HİÇ çizilmez.
    - hepsiDisa o'yu yalnız DOLUYSA yazar (yedek şişmesin); iceAktar o.o'yu
      4. parametreyle geri taşır.
    - Arama aynı katlanmış dizinden ontolojiyi de bulur.
@@ -118,7 +119,8 @@ test.describe('G80 ontoloji — detay arayüzü + kalıcılık', () => {
     await page.click('[data-act="onto-ac"]');
     await page.fill('#ontoMetin', 'Varlık katmanları: doğa, toplum, tin.');
     await page.click('[data-act="onto-kaydet"]');
-    await expect(page.locator('#dOntoBlok .kicker')).toHaveText('Ontoloji');
+    // v89: ontoloji artık yazılınca şerit doğar, Ontoloji sekmesi seçili gelir
+    await expect(page.locator('#dMetinBlok .ms-sekme.ms-secili')).toHaveText('Ontoloji');
     await expect(page.locator('.onto-metin')).toContainText('Varlık katmanları');
     const k = await page.evaluate(() => {
       const x = veri.kitaplar.find(y => y.ad === 'Özetli Kitap');
@@ -134,6 +136,8 @@ test.describe('G80 ontoloji — detay arayüzü + kalıcılık', () => {
     await rafaGec(page);
     await ozetHazir(page);
     await detayAc(page, 'Özetli Kitap');
+    // v89: iki alan da dolu → şerit, varsayılan Özet; Ontoloji sekmesine geç
+    await page.click('#msSekmeOnto');
     await expect(page.locator('.onto-metin')).toContainText('Varlık katmanları');
   });
 
@@ -147,8 +151,9 @@ test.describe('G80 ontoloji — detay arayüzü + kalıcılık', () => {
     await page.fill('#ontoMetin', 'Kalıcı ontoloji metni.');
     await page.click('[data-act="onto-kaydet"]');
     await expect(page.locator('.onto-metin')).toContainText('Kalıcı ontoloji');
-    // özeti değiştir → ontoloji durmalı
-    await page.click('#dOzetBlok [data-act="oz-ac"]');
+    // özeti değiştir → ontoloji durmalı (v89: önce Özet sekmesine geç, Düzenle şeritte)
+    await page.click('#msSekmeOzet');
+    await page.click('#dMetinBlok [data-act="oz-ac"]');
     await page.fill('#ozMetin', 'Değişen özet metni.');
     await page.click('[data-act="oz-kaydet"]');
     await expect(page.locator('.oz-metin')).toContainText('Değişen özet');
@@ -157,8 +162,9 @@ test.describe('G80 ontoloji — detay arayüzü + kalıcılık', () => {
       return { ozet: window.__ozet.oku(k.id), onto: window.__ozet.okuOnto(k.id) };
     });
     expect(s.onto, 'özet yazımı ontolojiyi silmedi').toBe('Kalıcı ontoloji metni.');
-    // ontolojiyi değiştir → özet durmalı
-    await page.click('#dOntoBlok [data-act="onto-ac"]');
+    // ontolojiyi değiştir → özet durmalı (v89: Ontoloji sekmesine geç, Düzenle şeritte)
+    await page.click('#msSekmeOnto');
+    await page.click('#dMetinBlok [data-act="onto-ac"]');
     await expect(page.locator('#ontoMetin')).toHaveValue('Kalıcı ontoloji metni.');
     await page.fill('#ontoMetin', 'Yeni ontoloji metni.');
     await page.click('[data-act="onto-kaydet"]');
@@ -239,7 +245,7 @@ test.describe('G80 ontoloji — detay arayüzü + kalıcılık', () => {
       "o'suz yedek ontolojiyi silmedi").toBe('Yedek ontolojisi');
   });
 
-  test('(E) uzun ontoloji katlanır, "Devamını göster" açar; arama ontoloji metninde bulur; CSV sütunu', async ({ page }) => {
+  test('(E) uzun ontoloji sekmesinde TAM gösterilir (v89: kırpma kalktı); arama ontoloji metninde bulur; CSV sütunu', async ({ page }) => {
     const uzunOnto = 'Ontoloji girişi. ' + 'kavram katmanı '.repeat(80) + 'ONTO SONU';
     await tohumla(page, [
       bitmis({ id: 'uzunlu', ad: 'Uzun Ontolojili', ozet: 'kısa özet', ozetG: 100 }),
@@ -248,9 +254,9 @@ test.describe('G80 ontoloji — detay arayüzü + kalıcılık', () => {
     await ozetHazir(page);
     await page.evaluate(o => window.__ozet.kaydetOnto('uzunlu', o), uzunOnto);
     await detayAc(page, 'Uzun Ontolojili');
+    // v89: şerit — Ontoloji sekmesine geçince metin TAM, "Devamını göster" yok
+    await page.click('#msSekmeOnto');
     await expect(page.locator('.onto-metin')).toContainText('Ontoloji girişi');
-    await expect(page.locator('.onto-metin')).not.toContainText('ONTO SONU');
-    await page.click('[data-act="onto-devam"]');
     await expect(page.locator('.onto-metin')).toContainText('ONTO SONU');
     await expect(page.locator('[data-act="onto-devam"]')).toHaveCount(0);
     await page.click('#ortuDetay .sheet-kapat');

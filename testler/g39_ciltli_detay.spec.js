@@ -62,7 +62,7 @@ test.describe('G39 Ciltli detay', () => {
 
   /* ---------- üst satır ---------- */
 
-  test('üst satır: ‹ Kitaplık geri bağlantısı kapatır, durum kicker görünür', async ({ page }) => {
+  test('üst satır: ‹ Pinakes geri bağlantısı kapatır, durum kicker görünür', async ({ page }) => {
     await tohumla(page, [doluKitap()]);
     await rafAc(page);
     await detayAcVe(page);

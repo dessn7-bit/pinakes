@@ -182,7 +182,7 @@ test.describe('G13 M4 — alıntı/not markdown dışa aktarımı', () => {
     await rafAc(page);
     await ayarlarAc(page);
     const { indirme, icerik } = await mdIndir(page, 'md-hepsi');
-    expect(indirme.suggestedFilename()).toMatch(/^kitaplik-alinti-not-.*\.md$/);
+    expect(indirme.suggestedFilename()).toMatch(/^pinakes-alinti-not-.*\.md$/);
     expect(icerik).toContain('## Varlık ve Zaman — Martin Heidegger');
     expect(icerik).toContain('> Dil, varlığın evidir.');
     expect(icerik).toContain('> İlk satır\n> ikinci satır');   // çok satırlı alıntı
@@ -195,7 +195,7 @@ test.describe('G13 M4 — alıntı/not markdown dışa aktarımı', () => {
     await rafAc(page);
     await ayarlarAc(page);
     const { indirme, icerik } = await mdIndir(page, 'md-alinti');
-    expect(indirme.suggestedFilename()).toMatch(/^kitaplik-alintilar-.*\.md$/);
+    expect(indirme.suggestedFilename()).toMatch(/^pinakes-alintilar-.*\.md$/);
     expect(icerik).toContain('Dil, varlığın evidir.');
     expect(icerik).not.toContain('Bu bölümü tekrar oku');
   });
@@ -208,7 +208,7 @@ test.describe('G13 M4 — alıntı/not markdown dışa aktarımı', () => {
     expect(icerik).toContain('(sf. 42) #varlık #dil-felsefesi');   // boşluk tireye döndü
     expect(icerik).toContain('Ağaç Kitabı');
     expect(icerik.charCodeAt(0)).not.toBe(0xFEFF);                 // BOM yok (md editörleri için)
-    expect(icerik).toMatch(/^# Kitaplık/);
+    expect(icerik).toMatch(/^# Pinakes/);
     expect(icerik).toContain('2 kitap');
   });
 

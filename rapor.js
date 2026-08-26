@@ -162,7 +162,7 @@
     let y = 96;
 
     c.fillStyle = RENK.soluk; c.font = '30px ' + SANS;
-    c.fillText('KİTAPLIK · OKUMA YILI', kenar, y); y += 46;
+    c.fillText('PİNAKES · OKUMA YILI', kenar, y); y += 46;
     c.fillStyle = RENK.pirinc; c.font = 'bold 132px ' + SERIF;
     c.fillText(String(ozet.yil), kenar, y); y += 168;
 
@@ -357,7 +357,7 @@
       if(!blob) return;
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'kitaplik-' + seciliYil + '.png';
+      a.download = 'pinakes-' + seciliYil + '.png';
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
       bildir(seciliYil + ' kartı indirildi');

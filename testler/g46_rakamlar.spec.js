@@ -321,7 +321,7 @@ test.describe('G46 Rakamlar ekranı — Ciltli', () => {
       page.waitForEvent('download'),
       page.click('#istIcerik [data-act="rp-png"]')
     ]);
-    expect(indirme.suggestedFilename()).toBe('kitaplik-' + (YIL - 1) + '.png');
+    expect(indirme.suggestedFilename()).toBe('pinakes-' + (YIL - 1) + '.png');
     const zemin = await page.evaluate(y => {
       const t = document.createElement('canvas');
       window.__rapor.raporCiz(t, window.__rapor.yilOzeti(y));

@@ -171,15 +171,13 @@ test.describe('G78 özet — detay arayüzü', () => {
     expect(s.mezarDamga, 'silme de kasıtlı yazımdır — mezar damgası taze').toBeGreaterThan(100);
   });
 
-  test('(h) uzun özet katlanır, "Devamını göster" tamamını açar', async ({ page }) => {
+  test('(h) uzun özet TAM gösterilir — v89: 600 kırpma/"Devamını göster" kalktı (sekme alanı)', async ({ page }) => {
     const uzunMetin = 'Başlangıç cümlesi. ' + 'dolgu sözcük '.repeat(80) + 'SON İŞARET';
     await tohumla(page, [bitmis({ ad: 'Uzun Özetli', ozet: uzunMetin, ozetG: 100 })]);
     await rafAc(page);
     await ozetHazir(page);
     await detayAc(page, 'Uzun Özetli');
     await expect(page.locator('.oz-metin')).toContainText('Başlangıç cümlesi');
-    await expect(page.locator('.oz-metin')).not.toContainText('SON İŞARET');
-    await page.click('[data-act="oz-devam"]');
     await expect(page.locator('.oz-metin')).toContainText('SON İŞARET');
     await expect(page.locator('[data-act="oz-devam"]')).toHaveCount(0);
   });
@@ -224,7 +222,7 @@ test.describe('G78 özet — görünürlük ve erişim', () => {
     await rafAc(page);
     await ozetHazir(page);
     const hepsi = await aktarimYakala(page, 'notlariMdAktar(false)');
-    expect(hepsi.ad).toMatch(/^kitaplik-alinti-not-.*\.md$/);
+    expect(hepsi.ad).toMatch(/^pinakes-alinti-not-.*\.md$/);
     expect(hepsi.icerik).toContain('## Notsuz Ama Özetli — Yazar A');
     expect(hepsi.icerik).toContain('### Özet');
     expect(hepsi.icerik).toContain('Kitabın ana fikri budur.');

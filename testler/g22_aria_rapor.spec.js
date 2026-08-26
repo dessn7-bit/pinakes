@@ -292,7 +292,7 @@ test.describe('G22 M2 — yıl sonu raporu', () => {
       page.waitForEvent('download'),
       page.click('#istIcerik [data-act="rp-png"]')
     ]);
-    expect(indirme.suggestedFilename()).toBe('kitaplik-' + YIL + '.png');
+    expect(indirme.suggestedFilename()).toBe('pinakes-' + YIL + '.png');
     const zemin = await page.evaluate(y => {
       const t = document.createElement('canvas');
       window.__rapor.raporCiz(t, window.__rapor.yilOzeti(y));

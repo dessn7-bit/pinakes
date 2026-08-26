@@ -582,7 +582,7 @@
     const bugun = gunIso();
     const sayi = o.vadeler.filter(v => v <= bugun).length;
     try{
-      await kayit.showNotification('Deneme — Kitaplık', {
+      await kayit.showNotification('Deneme — Pinakes', {
         body: sayi ? (sayi + ' alıntı seni bekliyor. ' + (o.ornekMetin || '')) :
           'Bugün bekleyen tekrar yok — bildirim böyle görünecek.',
         tag: 'kitaplik-deneme', icon: './icon-192.png', badge: './icon-192.png'

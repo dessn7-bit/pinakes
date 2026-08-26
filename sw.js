@@ -1,4 +1,6 @@
-const CACHE = 'kitaplik-v88';
+/* Önbellek adı ÖNEKİ 'kitaplik-' KALIR (v89'da görünen ad Pinakes oldu ama
+   iç kimlikler değişmez — kk_* anahtarlarıyla aynı kural). Yalnız sürüm artar. */
+const CACHE = 'kitaplik-v89';
 // OCR paketi kovası (ocr.js yönetir): ~6 MB'lik tesseract paketi kullanıcı
 // ONAYIYLA bir kez iner, buraya alınır. ASSETS'e BİLEREK girmez — ilk PWA
 // kurulumunda 6 MB indirtmek yanlış olurdu. ocr.js dosyasının kendisi (küçük

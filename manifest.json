@@ -1,7 +1,7 @@
 {
-  "name": "Kitaplık",
-  "short_name": "Kitaplık",
-  "description": "Kişisel kütüphane takibi — okuduklarım, notlar, puanlar",
+  "name": "Pinakes",
+  "short_name": "Pinakes",
+  "description": "Okuduklarının kataloğu ve ontolojisi",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
