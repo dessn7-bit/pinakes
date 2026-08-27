@@ -1091,9 +1091,12 @@ test.describe('G51 service worker push', () => {
   test('sw kaynak: bildirim.js ASSETS\'te; OCR kova sözleşmesi bozulmadı (regresyon)', async () => {
     const e = SW_KAYNAK.match(/const ASSETS = \[([^\]]*)\]/)[1];
     expect(e).toContain("'./bildirim.js'");
-    // OCR sözleşmesi: kova sabiti + activate muafiyeti + /ocr/ dalı hâlâ yerinde
+    // OCR sözleşmesi: kova sabiti + activate muafiyeti + /ocr/ dalı hâlâ yerinde.
+    // v94: temizlik ÖNEK-SINIRLI (iki adres aynı Cache Storage havuzunu
+    // paylaşır) — öneksiz OCR kovası filtreye zaten girmez, muafiyet bu
+    // biçimde sürer (davranış kanıtı g91 sandbox vakasında).
     expect(SW_KAYNAK).toContain("const OCR_KOVA = 'kk_ocr_paket_v1'");
-    expect(SW_KAYNAK).toContain('k !== CACHE && k !== OCR_KOVA');
+    expect(SW_KAYNAK).toContain("k.indexOf(ONEK + '-') === 0 && k !== CACHE");
     expect(SW_KAYNAK.indexOf("indexOf('/ocr/')")).toBeGreaterThan(-1);
   });
 });

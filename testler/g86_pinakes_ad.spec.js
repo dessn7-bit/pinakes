@@ -148,8 +148,13 @@ test.describe('G86 Pinakes — görünen ad', () => {
   test('(e) iç kimlikler kaynakta AYNEN: sw önbellek öneki, DEPO sabiti, senkron/worker adresleri', async () => {
     const kok = path.join(__dirname, '..');
     const sw = fs.readFileSync(path.join(kok, 'sw.js'), 'utf8');
-    expect(sw, "önbellek adı 'kitaplik-v##' kalır — yalnız sürüm artar")
-      .toMatch(/const CACHE = 'kitaplik-v\d+';/);
+    /* v94 adres taşıma: önek scope'tan türer — VARSAYILAN 'kitaplik' kalır
+       (location'sız sandbox ve eski adres eski önekle sürer), 'pinakes' yalnız
+       /pinakes/ scope'unda. Kilit yeni sözleşmeyi korur. */
+    expect(sw, "önek scope'tan; varsayılan 'kitaplik' kalır (v94)")
+      .toMatch(/const ONEK = SW_YOL\.indexOf\('\/pinakes\/'\) === 0 \? 'pinakes' : 'kitaplik';/);
+    expect(sw, "önbellek adı ONEK + '-v##' — yalnız sürüm artar")
+      .toMatch(/const CACHE = ONEK \+ '-v\d+';/);
     const index = fs.readFileSync(path.join(kok, 'index.html'), 'utf8');
     expect(index, 'DEPO anahtarı değişmedi').toContain("const DEPO = 'kk_kitaplik_v1'");
     expect(index, 'arama worker adresi değişmedi')

@@ -141,7 +141,9 @@ test.describe('G50 sw sözleşmeleri', () => {
   });
 
   test('activate temizliği OCR kovasını KORUR, bayat sürüm kovasını siler', async () => {
-    const simdiki = SW_KAYNAK.match(/const CACHE = '([^']+)'/)[1];
+    /* v94: CACHE artık literal değil ONEK + '-v##' — sandbox location'sız,
+       önek varsayılan 'kitaplik' (g86 kilidi); sürüm kaynaktan çekilir. */
+    const simdiki = 'kitaplik-v' + SW_KAYNAK.match(/const CACHE = ONEK \+ '-v(\d+)'/)[1];
     const k = swKurCok(['kitaplik-v0-bayat', 'kk_ocr_paket_v1', simdiki]);
     const bekleyen = [];
     k.dinleyici.activate({ waitUntil: p => bekleyen.push(p) });
@@ -152,7 +154,9 @@ test.describe('G50 sw sözleşmeleri', () => {
   });
 
   test('/ocr/ isteği önce OCR kovasından döner; ana kovaya yazılmaz; kova boşsa ağa düşer', async () => {
-    const simdiki = SW_KAYNAK.match(/const CACHE = '([^']+)'/)[1];
+    /* v94: CACHE artık literal değil ONEK + '-v##' — sandbox location'sız,
+       önek varsayılan 'kitaplik' (g86 kilidi); sürüm kaynaktan çekilir. */
+    const simdiki = 'kitaplik-v' + SW_KAYNAK.match(/const CACHE = ONEK \+ '-v(\d+)'/)[1];
     const k = swKurCok([simdiki]);
     const url = 'https://dessn7-bit.github.io/kitaplik/ocr/tur.traineddata.gz';
     // kova boş → ağa düşer

@@ -16,6 +16,9 @@ http.createServer((istek, yanit) => {
   let yol;
   try { yol = decodeURIComponent(new URL(istek.url, 'http://x').pathname); }
   catch (e) { yanit.writeHead(400); return yanit.end('bozuk istek'); }
+  /* v94 adres-taşıma testleri: /kitaplik/... ve /pinakes/... önekleri köke
+     düşer — üretimdeki iki Pages yolunun yerel taklidi. */
+  yol = yol.replace(/^\/(kitaplik|pinakes)(?=\/)/, '');
   if (yol === '/') yol = '/index.html';
   const dosya = path.normalize(path.join(KOK, yol));
   if (!dosya.startsWith(KOK) || !fs.existsSync(dosya) || fs.statSync(dosya).isDirectory()) {

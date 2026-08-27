@@ -1018,6 +1018,12 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
      Yönelim yüzeyi. DOM'da raf panelinden ÖNCE duruyor; bu yüzden `.sort-row`
      ve `.yedek-wrap` sınıflarını kullanmaz (bkz. as- CSS notu). -->
 <section class="panel active" id="panel-ana">
+  <!-- TAŞIMA KARŞILAMASI (v94): yalnız YENİ adreste (/pinakes/) ve kütüphane
+       BOŞKEN görünür (tasimaKarsilamaTazele). anaIcerik'in DIŞINDA: anaCiz
+       innerHTML'i ezdiği için kart burada güvende. İçerik iki modda JS'le
+       çizilir: davet (yedek yükle) / rapor (doğrulama özeti). -->
+  <div id="tasimaKarsilama" style="display:none;margin:14px 16px 0;padding:14px 16px;border:1px solid var(--brass);border-radius:12px"></div>
+  <input type="file" id="tasimaDosya" accept="application/json" hidden>
   <div class="as-wrap" id="anaIcerik"></div>
 </section>
 
@@ -1143,6 +1149,15 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
          (4) aktarım (önce GÜVENLİ çıktı, sonra kütüphaneyi DEĞİŞTİREN girdi),
          (5) toplu girdi aracı, (6) o girdinin yerel depolamada bıraktığı iz.
          (7) tehlikeli bölge en altta, kopuk. -->
+    <!-- TAŞIMA ŞERİDİ (v94): yalnız ESKİ adreste (/kitaplik/) görünür — baslat
+         pathname'e bakıp açar. Yeni adreste ve test kökünde hiç görünmez. -->
+    <div id="tasimaSeridi" style="display:none;margin:10px 0 4px;padding:12px 14px;border:1px solid var(--brass);border-radius:12px">
+      <div style="font-weight:600;margin-bottom:6px">Pinakes yeni adrese taşındı</div>
+      <p class="ay-not" style="margin:0 0 10px">Yeni adres: <strong>dessn7-bit.github.io/pinakes</strong>.
+        Verilerini taşımak için aşağıdan taşıma yedeğini indir; sonra yeni adresteki karşılama
+        ekranından bu dosyayı yükle. Bu adres, taşıma bitene kadar açık kalacak.</p>
+      <button class="btn btn-cerceve" data-act="tasima-yedek">Taşıma yedeğini indir</button>
+    </div>
     <div class="yedek-wrap">
       <section class="ay-bolum" id="ayBolumSenkron">
         <div class="ay-bolum-bas"><span class="kicker">Senkron</span></div>
@@ -3715,6 +3730,85 @@ function dosyaIndir(icerik, ad, tip){
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
+/* ---------- ADRES TAŞIMA (v94): /kitaplik → /pinakes ----------
+   IndexedDB + localStorage KÖKEN+YOL bazlı: yeni adres tarayıcı için başka
+   sitedir, hiçbir veri kendiliğinden geçmez. Taşıma yolu: eski adreste
+   "taşıma yedeği" (normal yedek + KAPAKLAR base64 + senkron odası +
+   tema/görünüm tercihi), yeni adreste boş-kütüphane karşılaması + yükleme
+   sonrası doğrulama özeti. Tek kod tabanı iki adreste yayınlanır; davranış
+   pathname'den ayrışır. kk_* anahtarları AYNEN (yedek onlara yazar). */
+function tasimaEskiAdres(){ return location.pathname.indexOf('/kitaplik/') === 0; }
+function tasimaYeniAdres(){ return location.pathname.indexOf('/pinakes/') === 0; }
+async function tasimaYedegiUret(){
+  const govde = { surum: 2, tarih: new Date().toISOString(), tasima: 1, ...veri,
+    ozetler: window.__ozet.hepsiDisa() };
+  /* KAPAKLAR: normal yedeğe bilerek girmiyor (v27 — boyut); taşıma tek
+     seferlik olduğundan burada base64 gömülür. Eklenti yoksa boş geçilir. */
+  govde.kapaklar = {};
+  if(window.__kapak && window.__kapak.hepsi){
+    try{
+      const [idler, bloblar] = await Promise.all([
+        window.__kapak.anahtarlar(), window.__kapak.hepsi()]);
+      const oku = b => new Promise((c, r) => {
+        const fr = new FileReader();
+        fr.onload = () => c(fr.result); fr.onerror = r;
+        fr.readAsDataURL(b);
+      });
+      for(let i = 0; i < idler.length; i++)
+        govde.kapaklar[idler[i]] = await oku(bloblar[i]);
+    }catch(e){ window._iz && window._iz('tasimaKapak', e); }
+  }
+  /* Senkron odası: yeni adres yedekten okuyup kendiliğinden bağlanabilsin.
+     Yalnız oda+cihaz — sonSenkron/sonSema damgaları taşınmaz (taze kurulur). */
+  try{
+    const s = JSON.parse(localStorage.getItem('kk_senkron_v1'));
+    if(s && s.oda) govde.senkronAyar = { oda: s.oda, cihaz: s.cihaz || '' };
+  }catch(e){}
+  /* Küçük cihaz tercihleri — bildirim BİLEREK yok: push aboneliği köken
+     bazlıdır, yeni adreste yeniden kurulur (karşılama söylüyor). */
+  govde.tercihler = {};
+  try{ const t = localStorage.getItem('kk_tema_v1'); if(t) govde.tercihler.tema = t; }catch(e){}
+  try{ const g = localStorage.getItem('kk_gorunum_v1'); if(g) govde.tercihler.gorunum = g; }catch(e){}
+  return govde;
+}
+async function tasimaYedegiIndir(){
+  toast('Taşıma yedeği hazırlanıyor…');
+  const govde = await tasimaYedegiUret();
+  dosyaIndir(JSON.stringify(govde), `pinakes-tasima-${bugun()}.json`, 'application/json');
+  toast('Taşıma yedeği indirildi — yeni adreste karşılama ekranından yükle');
+}
+let tasimaRapor = null;   // kk-ice-bitti detayı — karşılama rapor modu
+function tasimaKarsilamaTazele(){
+  const kart = document.getElementById('tasimaKarsilama');
+  if(!kart) return;
+  const goster = tasimaYeniAdres() && (tasimaRapor || !veri.kitaplar.length);
+  kart.style.display = goster ? '' : 'none';
+  if(!goster) return;
+  if(tasimaRapor){
+    const r = tasimaRapor;
+    kart.innerHTML = '<div style="font-weight:600;margin-bottom:6px">Yedek yüklendi — rakamları doğrula</div>'
+      + '<ul style="margin:0 0 10px 18px;padding:0;font-size:.9rem;line-height:1.7">'
+      + '<li><strong>' + r.kitap + '</strong> kitap</li>'
+      + '<li><strong>' + r.ozet + '</strong> özet · <strong>' + r.onto + '</strong> ontoloji</li>'
+      + '<li><strong>' + r.kapak + '</strong> kapak fotoğrafı</li>'
+      + '<li><strong>' + r.not + '</strong> not/alıntı</li>'
+      + '<li>Senkron odası: ' + (r.senkron ? 'geldi — açılışta bağlanır' : 'yedekte yoktu — Ayarlar ▸ Senkron\'dan odaya yeniden bağlan') + '</li></ul>'
+      + '<p class="ay-not" style="margin:0 0 10px">Bildirimler bu adres için yeniden kurulmalı: '
+      + 'Ayarlar ▸ Hatırlatma\'dan aç. Rakamlar eski adresle eşleşiyorsa taşıma tamam.</p>'
+      + '<button class="btn btn-birincil" data-act="tasima-basla">Uygulamayı başlat</button>';
+    return;
+  }
+  kart.innerHTML = '<div style="font-weight:600;margin-bottom:6px">Pinakes yeni adresinde</div>'
+    + '<p class="ay-not" style="margin:0 0 10px">Eski adreste (…/kitaplik) verin varsa: orada '
+    + 'Ayarlar ▸ "Taşıma yedeğini indir" ile dosyayı al, sonra buradan yükle. '
+    + 'Kitaplar, özetler, ontolojiler, kapaklar, notlar ve senkron odası birlikte gelir.</p>'
+    + '<button class="btn btn-cerceve" data-act="tasima-yukle">Eski adresten yedeğini yükle</button>';
+}
+document.addEventListener('kk-ice-bitti', e => {
+  if(!tasimaYeniAdres()) return;
+  tasimaRapor = e.detail || null;
+  tasimaKarsilamaTazele();
+});
 function disaAktar(){
   /* ozetler (v80): metin IDB'de yaşadığı için ...veri spread'i artık kapsamıyor —
      özet SENKRONLANAN veridir (kapak fotoğrafının aksine), yedeğe AYRI alan
@@ -3808,7 +3902,7 @@ function iceAktar(dosya){
     try{
       const y = JSON.parse(okuyucu.result);
       if(!y || !Array.isArray(y.kitaplar)) throw new Error('biçim');
-      let eklendi = 0;
+      let eklendi = 0, notSayisi = 0;
       const anah = k => katla(k.ad + '|' + (k.yazar||''));
       const mevcut = new Set(veri.kitaplar.map(anah));
       const mevcutIdler = new Set(veri.kitaplar.map(k => k.id));
@@ -3836,6 +3930,7 @@ function iceAktar(dosya){
         veri.kitaplar.push(kayit);
         mevcutIdler.add(kayit.id);
         mevcut.add(anah(k)); eklendi++;
+        notSayisi += (kayit.notlar || []).length;   // v94: taşıma doğrulama özeti
         taslakAday(kayit.id);   // v82: kuyruk sıralı + 3 sn aralıklı, toplu geri yükleme worker'ı dövmez
       });
       if(y.hedef && typeof y.hedef === 'object') veri.hedef = { ...y.hedef, ...veri.hedef };
@@ -3852,25 +3947,69 @@ function iceAktar(dosya){
          işaretler kaydetHam içinde güncellenir, ikinci depoKaydet ile oturur.
          v81: kayıttaki o (ontoloji) 4. parametreyle taşınır; o'suz eski
          yedekte undefined gider — kaydetHam mevcut ontolojiyi KORUR. */
-      if(y.ozetler && typeof y.ozetler === 'object'){
-        /* v86: özet id'leri kitap döngüsünün verdiği YENİ id'lerden geçirilir.
-           Eski id'ye yazmak, o id'yi taşıyan YEREL BAŞKA kitabın özetini damgası
-           yeniyse sessizce eziyordu — v81 "id çakışması → mevcut ezilmez"
-           kararının özet katmanı. İçeri alınmayan (mükerrer/bozuk) kitabın
-           özeti hiç yazılmaz: işaret basacak kitap bulunamayıp yetim kalıyor,
-           açılış süpürücüsü onu siliyordu. Haritada/atlananlarda OLMAYAN id'ler
-           (yedekte kitabı olmayan salt-özet kayıtları) eski davranışla, damga
-           kapısından geçerek aynen yazılır. */
-        const girisler = Object.entries(y.ozetler)
+      /* v86: özet id'leri kitap döngüsünün verdiği YENİ id'lerden geçirilir.
+         Eski id'ye yazmak, o id'yi taşıyan YEREL BAŞKA kitabın özetini damgası
+         yeniyse sessizce eziyordu — v81 "id çakışması → mevcut ezilmez"
+         kararının özet katmanı. İçeri alınmayan (mükerrer/bozuk) kitabın
+         özeti hiç yazılmaz: işaret basacak kitap bulunamayıp yetim kalıyor,
+         açılış süpürücüsü onu siliyordu. Haritada/atlananlarda OLMAYAN id'ler
+         (yedekte kitabı olmayan salt-özet kayıtları) eski davranışla, damga
+         kapısından geçerek aynen yazılır. */
+      const girisler = (y.ozetler && typeof y.ozetler === 'object')
+        ? Object.entries(y.ozetler)
           .filter(([id, o]) => o && typeof o.m === 'string' && !disiKalan.has(id))
           .map(([id, o]) => [idHarita.get(id) || id, o])
-          .filter(([id, o]) => (parseInt(o.g) || 0) > window.__ozet.damga(id));
-        if(girisler.length) Promise.all(girisler.map(([id, o]) =>
-          window.__ozet.kaydetHam(id, o.m, o.g, o.o)))
-          .then(() => { depoKaydet(); if(typeof listeCiz === 'function') listeCiz(); });
-      }
+          .filter(([id, o]) => (parseInt(o.g) || 0) > window.__ozet.damga(id))
+        : [];
+      const ozetSoz = girisler.length
+        ? Promise.all(girisler.map(([id, o]) =>
+            window.__ozet.kaydetHam(id, o.m, o.g, o.o)))
+          .then(() => { depoKaydet(); if(typeof listeCiz === 'function') listeCiz(); })
+        : Promise.resolve();
+      /* KAPAKLAR (v94, yalnız taşıma yedeğinde): base64 → Blob → IDB. Özetle
+         aynı id-güvenliği: disiKalan atlanır, idHarita'dan geçirilir. */
+      const kapakGirisler = (y.kapaklar && typeof y.kapaklar === 'object'
+          && window.__kapak && window.__kapak.yaz)
+        ? Object.entries(y.kapaklar)
+          .filter(([id, d]) => typeof d === 'string' && d.indexOf('data:') === 0
+            && !disiKalan.has(id))
+          .map(([id, d]) => [idHarita.get(id) || id, d])
+        : [];
+      let kapakYazilan = 0;
+      const kapakSoz = kapakGirisler.length
+        ? Promise.all(kapakGirisler.map(([id, d]) =>
+            fetch(d).then(r => r.blob()).then(b => window.__kapak.yaz(id, b))
+              .then(() => { kapakYazilan++; })
+              .catch(e => { window._iz && window._iz('tasimaKapakYaz', e); })))
+        : Promise.resolve();
+      /* SENKRON ODASI (v94): yedek taşıyorsa ve bu cihazda oda YOKSA yazılır —
+         mevcut oda asla ezilmez. Bağlanma sayfa açılışında kurulur
+         (karşılamadaki "Uygulamayı başlat" yeniden yükler). */
+      let senkronYazildi = false;
+      try{
+        if(y.senkronAyar && y.senkronAyar.oda && !localStorage.getItem('kk_senkron_v1')){
+          localStorage.setItem('kk_senkron_v1', JSON.stringify(
+            { oda: String(y.senkronAyar.oda), cihaz: String(y.senkronAyar.cihaz || '') }));
+          senkronYazildi = true;
+        }
+      }catch(e){}
+      /* küçük tercihler — yalnız boşsa (mevcut cihaz tercihi ezilmez) */
+      try{
+        const t = y.tercihler || {};
+        if(t.tema && !localStorage.getItem('kk_tema_v1')) localStorage.setItem('kk_tema_v1', t.tema);
+        if(t.gorunum && !localStorage.getItem('kk_gorunum_v1')) localStorage.setItem('kk_gorunum_v1', t.gorunum);
+      }catch(e){}
       depoKaydet(); hepsiniCiz();
       toast(eklendi ? `${eklendi} kitap geri yüklendi` : 'Yeni kitap yok — hepsi zaten kayıtlı');
+      /* v94: doğrulama özeti — asenkron yazımlar bitince olayla duyurulur;
+         taşıma karşılaması bunu rakam ekranına çevirir. Hata da duyurur
+         (dinleyen yoksa zararsız). */
+      Promise.all([ozetSoz, kapakSoz]).catch(() => {}).then(() => {
+        document.dispatchEvent(new CustomEvent('kk-ice-bitti', { detail: {
+          kitap: eklendi, ozet: girisler.length,
+          onto: girisler.filter(([, o]) => o && typeof o.o === 'string' && o.o.trim()).length,
+          kapak: kapakYazilan, not: notSayisi, senkron: senkronYazildi } }));
+      });
     }catch(e){ toast('Dosya okunamadı — geçerli bir Pinakes yedeği değil'); }
   };
   okuyucu.readAsText(dosya);
@@ -4072,6 +4211,11 @@ function anaBugunOkuma(){
   return { ms, sayfa };
 }
 function anaCiz(){
+  /* v94: taşıma yüzeyleri — karşılama (yeni adres + boş kütüphane) her ana
+     çizimde tazelenir; eski-adres şeridi pathname sabit olduğundan ucuz. */
+  tasimaKarsilamaTazele();
+  const serit = document.getElementById('tasimaSeridi');
+  if(serit) serit.style.display = tasimaEskiAdres() ? '' : 'none';
   const kap = document.getElementById('anaIcerik');
   if(!kap) return;
 
@@ -4771,6 +4915,9 @@ document.addEventListener('click', e => {
         : (v === 'karanlik' ? 'Karanlık tema açık' : 'Açık tema'));
       break; }
     case 'disa-aktar': disaAktar(); break;
+    case 'tasima-yedek': tasimaYedegiIndir(); break;                       // v94 eski adres
+    case 'tasima-yukle': document.getElementById('tasimaDosya').click(); break;   // v94 yeni adres
+    case 'tasima-basla': location.reload(); break;                         // v94 rapor sonrası
     case 'csv-aktar': csvAktar(); break;
     case 'md-alinti': notlariMdAktar(true); break;
     case 'md-hepsi': notlariMdAktar(false); break;
@@ -4815,6 +4962,11 @@ document.getElementById('etiketFiltre').addEventListener('change', e => {
   durum.etiket = e.target.value; listeCiz();
 });
 document.getElementById('iceDosya').addEventListener('change', e => {
+  if(e.target.files[0]) iceAktar(e.target.files[0]);
+  e.target.value = '';
+});
+/* v94: taşıma karşılaması AYNI iceAktar borusundan geçer — ayrı yazım yolu yok */
+document.getElementById('tasimaDosya').addEventListener('change', e => {
   if(e.target.files[0]) iceAktar(e.target.files[0]);
   e.target.value = '';
 });

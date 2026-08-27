@@ -1,6 +1,13 @@
-/* Önbellek adı ÖNEKİ 'kitaplik-' KALIR (v89'da görünen ad Pinakes oldu ama
-   iç kimlikler değişmez — kk_* anahtarlarıyla aynı kural). Yalnız sürüm artar. */
-const CACHE = 'kitaplik-v93';
+/* v94 ADRES TAŞIMA: tek sw.js İKİ adreste yayınlanır (/kitaplik ve /pinakes).
+   Önek scope'tan türer — yeni adres 'pinakes-' ile TEMİZ başlar, eski adres
+   'kitaplik-' önekini sürdürür (oradaki eski sürüm kovaları activate'te doğru
+   silinsin). kk_* depo anahtarları DEĞİŞMEZ (yedek onlara yazar). */
+/* location güvenli okunur: test sandbox'ları (g51 swPushKur) sw.js'i location'sız
+   ya da pathname'siz sahte self ile değerlendirir — varsayılan 'kitaplik'
+   (eski sözleşme; gerçek SW'de location.pathname her zaman var). */
+const SW_YOL = String((self.location && self.location.pathname) || '');
+const ONEK = SW_YOL.indexOf('/pinakes/') === 0 ? 'pinakes' : 'kitaplik';
+const CACHE = ONEK + '-v94';
 // OCR paketi kovası (ocr.js yönetir): ~6 MB'lik tesseract paketi kullanıcı
 // ONAYIYLA bir kez iner, buraya alınır. ASSETS'e BİLEREK girmez — ilk PWA
 // kurulumunda 6 MB indirtmek yanlış olurdu. ocr.js dosyasının kendisi (küçük
@@ -15,9 +22,12 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
-      // OCR kovası sürüm temizliğinden MUAF: "k !== CACHE" filtresi onu da
-      // silseydi her sw bump'ında kullanıcının onayla indirdiği 6 MB uçardı.
-      Promise.all(keys.filter(k => k !== CACHE && k !== OCR_KOVA).map(k => caches.delete(k)))
+      // OCR kovası sürüm temizliğinden MUAF: silinseydi her sw bump'ında
+      // kullanıcının onayla indirdiği 6 MB uçardı. v94: temizlik KENDİ
+      // ÖNEK ailesiyle sınırlı — iki adres AYNI origin'de aynı Cache Storage
+      // havuzunu paylaşır; öneksiz filtre kardeş adresin kovasını silerdi.
+      Promise.all(keys.filter(k => k.indexOf(ONEK + '-') === 0 && k !== CACHE)
+        .map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
