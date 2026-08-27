@@ -489,8 +489,9 @@
     const k = (veri.kitaplar || []).find(x => x.id === is.id);
     if(!k || !alanBos(k, 'tur')) return 'dolu';
     /* turRed: kullanıcı bu kitapta otomatik türü GERİ ALDI — kalıcı red
-       (senkronlu union, kesfetGizli deseni). Otomatik yazım bir daha denemez. */
-    if((veri.turRed || {})[is.id]) return 'red';
+       (senkronlu union, kesfetGizli deseni). Otomatik yazım bir daha denemez —
+       kullanıcı Ayarlar'daki defterden çıkarmadıkça (v91: redAktif). */
+    if(redAktif(is.id)) return 'red';
     if(!taksonomi){
       try{ taksonomi = await window.__ara.turler(); }
       catch(e){ return 'taksonomi-yok'; }   // eşleme imkânsız — boş kalır, damga YOK
@@ -517,7 +518,7 @@
        anında alanBos + turRed YENİDEN denetlenir: yanıt beklenirken kullanıcı
        türü elle doldurduysa ya da geri aldıysa arka plan onu EZMEZ. */
     const canli = (veri.kitaplar || []).find(x => x.id === is.id);
-    if(tur && canli && alanBos(canli, 'tur') && !(veri.turRed || {})[is.id]){
+    if(tur && canli && alanBos(canli, 'tur') && !redAktif(is.id)){
       canli.tur = tur;
       canli.g = Date.now();   // kullanıcı-görünür alan değişti — damga (senkron taşır)
       /* Geri alma defteri: OTOMATİK yazılan her tür kaydedilir (hangi kitap,
@@ -599,7 +600,7 @@
     const deneme = defterOku(OTO_DENEME_ANAHTAR);
     const simdi = Date.now();
     return (veri.kitaplar || []).filter(k => alanBos(k, 'tur')
-      && !(veri.turRed || {})[k.id]
+      && !redAktif(k.id)
       && !(deneme[k.id] && (simdi - deneme[k.id]) < OTO_YENIDEN_MS));
   }
   async function otoTara(){
@@ -634,6 +635,15 @@
     otoOturum.durum = 'bitti';
     otoDurumTazele();
   }
+  /* Etkin red (v91): union'dan kayıt SİLMEK öbür cihazdan dirilirdi
+     (kesfetGizliGeri dersi) — defterden çıkarma ayrı öz-damgalı haritada
+     (veri.turRedGeri, senkronlu union) yaşar. Red ancak damgası geri alma
+     damgasından YENİYSE hüküm sürer; yeniden "geri al" denirse yeni red
+     damgası geri damgayı geçer, silme gerekmez. */
+  function redAktif(id){
+    const r = (veri.turRed || {})[id];
+    return !!(r && r > (((veri.turRedGeri || {})[id]) || 0));
+  }
   /* Geri alma: tür temizlenir (kullanıcı eylemi — damga meşru) + kalıcı red.
      Red SENKRONLU (veri.turRed union, kesfetGizli emsali) — cihaz-yerel kalsa
      öbür cihazın açılış taraması aynı yanlış türü yeniden yazar, senkron da
@@ -656,7 +666,7 @@
     if(typeof depoKaydet === 'function') depoKaydet();
     if(typeof hepsiniCiz === 'function') hepsiniCiz();
     durumTazele(); otoDurumTazele(); otoListeCiz();
-    bildir('Tür geri alındı — bu kitaba bir daha otomatik tür yazılmaz');
+    bildir('Tür geri alındı — bu kitaba bir daha otomatik tür yazılmaz. Ayarlar’dan geri alabilirsin.');
   }
   function otoGeriAlTum(){
     const ids = atananGecerli().map(g => g.id);
@@ -665,7 +675,69 @@
     if(typeof depoKaydet === 'function') depoKaydet();
     if(typeof hepsiniCiz === 'function') hepsiniCiz();
     durumTazele(); otoDurumTazele(); otoListeCiz();
-    bildir(ids.length + ' kitabın türü geri alındı');
+    bildir(ids.length + ' kitabın türü geri alındı — Ayarlar’dan geri alabilirsin');
+  }
+  /* ---------- Geri alma DEFTERİ (v91): red kalıcıydı, dönüş yolu yoktu ----------
+     Yanlışlıkla ✕ / "Tümünü geri al" basılan kitap otomatik türden kalıcı
+     mahrum kalıyordu (fiilen yaşandı). "Tekrar dene" kitabı defterden çıkarır:
+     turRedGeri damgası basılır (senkronlu — silme union'dan dirilirdi) ve
+     yerel deneme damgası düşürülür ki sonraki açılış taraması 90 gün
+     beklemeden yeniden sorsun. Tür KENDİLİĞİNDEN DOLMAZ — kitap yalnız
+     sonraki taramada yeniden aday olur; arayüz bunu açıkça söyler. */
+  function redListesi(){
+    return Object.entries(veri.turRed || {})
+      .filter(([id]) => redAktif(id))
+      .map(([id, t]) => ({ id, t, kitap: (veri.kitaplar || []).find(x => x.id === id) }))
+      .filter(g => g.kitap)   // silinmiş kitabın kaydı görünmez (denenecek şey yok)
+      .sort((a, b) => (b.t || 0) - (a.t || 0));
+  }
+  function redCikar(id){
+    if(!redAktif(id)) return false;
+    veri.turRedGeri = veri.turRedGeri || {};
+    veri.turRedGeri[id] = Date.now();
+    const d = defterOku(OTO_DENEME_ANAHTAR);
+    if(d[id]){ delete d[id]; defterYaz(OTO_DENEME_ANAHTAR, d); }
+    return true;
+  }
+  function redCikarTek(id){
+    if(!redCikar(id)) return;
+    if(typeof depoKaydet === 'function') depoKaydet();
+    durumTazele(); otoDurumTazele(); redListeCiz();
+    bildir('Defterden çıkarıldı — türü boşsa sonraki taramada yeniden denenir');
+  }
+  function redTemizle(){
+    const liste = redListesi();
+    if(!liste.length) return;
+    if(!confirm(liste.length + ' kitap defterden çıkarılsın mı? Türleri kendiliğinden dolmaz — '
+      + 'türü boş olanlar sonraki taramada yeniden denenir.')) return;
+    liste.forEach(g => redCikar(g.id));
+    if(typeof depoKaydet === 'function') depoKaydet();
+    durumTazele(); otoDurumTazele(); redListeCiz();
+    bildir(liste.length + ' kitap defterden çıkarıldı');
+  }
+  function redListeCiz(){
+    const g = document.getElementById('zgRedOrtuGovde');
+    if(!g) return;
+    const liste = redListesi();
+    if(!liste.length){
+      g.innerHTML = '<div class="zg-satir">Defter boş — geri alınmış kitap yok.</div>' +
+        '<div class="form-alt"><button class="btn btn-cerceve" data-act="zg-kapat" data-ortu="zgRedOrtu" style="flex:1">Kapat</button></div>';
+      return;
+    }
+    g.innerHTML =
+      '<p class="zg-not">Bu kitapların otomatik türünü geri almıştın; bir daha otomatik tür yazılmıyor. '
+      + '"Tekrar dene" kitabı defterden çıkarır: türü KENDİLİĞİNDEN DOLMAZ, '
+      + 'türü boşsa bir sonraki taramada yeniden aday olur.</p>'
+      + '<div class="zg-onizle-liste">' + liste.map(({ id, kitap }) =>
+        '<div class="zg-onizle-satir"><div class="zg-onizle-ic">'
+        + '<span class="zg-onizle-ad">' + esc(kitap.ad) + '</span>'
+        + (kitap.tur ? '<span class="zg-onizle-alan">Türü şu an dolu: ' + esc(turGoster(kitap.tur)) + '</span>' : '')
+        + '</div>'
+        + '<button class="btn btn-cerceve" data-act="zg-red-dene" data-kid="' + escAttr(id) + '" '
+        + 'style="flex:0 0 auto">Tekrar dene</button></div>').join('') + '</div>'
+      + '<div class="form-alt">'
+      + '<button class="btn btn-cerceve" data-act="zg-red-temizle" style="flex:1">Defteri temizle</button>'
+      + '<button class="btn btn-cerceve" data-act="zg-kapat" data-ortu="zgRedOrtu" style="flex:1">Kapat</button></div>';
   }
 
   /* ---------- Otomatik tür kartı (Ayarlar ▸ Katalog araçları) ---------- */
@@ -677,16 +749,30 @@
     kart.innerHTML = '<h3 class="ay-baslik">Otomatik tür</h3>'
       + '<p class="ay-not">Türü boş kitapların türü, uygulama açıkken arka planda sessizce aranır '
       + 've bulunursa doğrudan yazılır (1000Kitap düzenine eşlenemeyen boş kalır). '
-      + 'Yanlış bulunanı aşağıdan geri alabilirsin — geri aldığın kitaba bir daha otomatik tür yazılmaz.</p>'
+      + 'Yanlış bulunanı aşağıdan geri alabilirsin — geri aldığın kitaba, defterden çıkarmadıkça '
+      + 'bir daha otomatik tür yazılmaz.</p>'
       + '<div class="zg-depo-satir" id="zgOtoDurum">—</div>'
       + '<div class="ay-eylem"><button class="btn btn-cerceve" data-act="zg-oto-liste">'
-      + 'Otomatik atanan türler (<span id="zgOtoSayi">0</span>)</button></div>';
+      + 'Otomatik atanan türler (<span id="zgOtoSayi">0</span>)</button></div>'
+      /* v91: defter yolu — defter BOŞKEN hiç görünmez (otoDurumTazele yönetir).
+         hidden özniteliği DEĞİL inline display: .ay-eylem'in display:flex kuralı
+         [hidden] UA kuralını eziyor (g88 canlı kanıtı). */
+      + '<div class="ay-eylem" id="zgRedYol" style="display:none"><button class="btn btn-cerceve" data-act="zg-red-liste">'
+      + 'Geri alınanlar (<span id="zgRedSayi">0</span>)</button></div>';
     yuva.appendChild(kart);
     otoDurumTazele();
   }
   function otoDurumTazele(){
     const sayi = document.getElementById('zgOtoSayi');
     if(sayi) sayi.textContent = String(atananGecerli().length);
+    /* v91: defter yolu yalnız defter doluyken görünür */
+    const redYol = document.getElementById('zgRedYol');
+    if(redYol){
+      const n = redListesi().length;
+      redYol.style.display = n ? '' : 'none';
+      const rs = document.getElementById('zgRedSayi');
+      if(rs) rs.textContent = String(n);
+    }
     const el = document.getElementById('zgOtoDurum');
     if(!el) return;
     const kalanN = otoAdaylar().length;
@@ -713,11 +799,12 @@
     }
     g.innerHTML =
       '<p class="zg-not">Bu türleri uygulama kendisi yazdı. Geri aldığın kitabın türü boşalır ve '
-      + 'o kitaba bir daha otomatik tür yazılmaz; elle her zaman girebilirsin.</p>'
+      + 'o kitaba bir daha otomatik tür yazılmaz; elle her zaman girebilirsin. '
+      + 'Yanlışlıkla geri alırsan Ayarlar ▸ Otomatik tür ▸ "Geri alınanlar"dan çıkarabilirsin.</p>'
       + '<div class="zg-onizle-liste">' + liste.map(({ id, kitap, kayit }) =>
         '<div class="zg-onizle-satir"><div class="zg-onizle-ic">'
         + '<span class="zg-onizle-ad">' + esc(kitap.ad) + '</span>'
-        + '<span class="zg-onizle-alan">Tür: ' + esc(kayit.tur) + '</span></div>'
+        + '<span class="zg-onizle-alan">Tür: ' + esc(turGoster(kayit.tur)) + '</span></div>'
         + '<button class="zg-cikar" data-act="zg-oto-geri" data-kid="' + escAttr(id) + '" '
         + 'aria-label="Bu kitabın türünü geri al">✕</button></div>').join('') + '</div>'
       + '<div class="form-alt">'
@@ -1390,7 +1477,7 @@
     const alt = [
       k.bitisTarihi ? String(k.bitisTarihi).slice(0, 4) + ' yılında bitti' : '',
       k.sayfa > 0 ? k.sayfa + ' sayfa' : '',
-      k.tur || ''
+      k.tur ? turGoster(k.tur) : ''
     ].filter(Boolean).join(' · ');
     g.innerHTML = puanOnayHtml_() +
       '<div class="zg-sayac-satir"><span class="zg-sayac">' + (puanSira + 1) + ' / ' + puanBasi + '</span>' +
@@ -1506,7 +1593,7 @@
     const alt = [
       k.bitisTarihi ? String(k.bitisTarihi).slice(0, 4) + ' yılında bitti' : '',
       k.sayfa > 0 ? k.sayfa + ' sayfa' : '',
-      k.tur || ''
+      k.tur ? turGoster(k.tur) : ''
     ].filter(Boolean).join(' · ');
     g.innerHTML = ozetOnayHtml_() +
       '<div class="zg-sayac-satir"><span class="zg-sayac">' + (ozSira + 1) + ' / ' + ozBasi + '</span>' +
@@ -1725,6 +1812,12 @@
           break;
         case 'zg-oto-geri': otoGeriAlTek(el.dataset.kid); break;
         case 'zg-oto-geri-tum': otoGeriAlTum(); break;
+        case 'zg-red-liste':
+          ortuKur('zgRedOrtu', 'Geri alınanlar');
+          redListeCiz(); ac('zgRedOrtu');
+          break;
+        case 'zg-red-dene': redCikarTek(el.dataset.kid); break;
+        case 'zg-red-temizle': redTemizle(); break;
         case 'zg-puanla': puanBaslat(); break;
         case 'zg-puan': puanVer(parseInt(el.dataset.v)); break;
         case 'zg-atla': puanSira++; puanCiz_(); break;   // GEÇİCİ: puan yazılmaz, sonraki turda döner
@@ -1757,5 +1850,6 @@
   window.__zengin = { eksikSayim, alanBos, turCevir, turCevirHam, baslikUyar, kitapSorgula, uygula,
     kuyrukYukle, kuyrukKaydet, kuyrukTemizle, puanlanacaklar, tarihsizler, durumTazele,
     otoTur, otoAdaylar, atananGecerli, taksonomiKur: t => { taksonomi = t; },
+    redAktif, redListesi,   // v91: geri alma defteri
     ARALIK_MS, ALANLAR, KUYRUK_ANAHTAR, OTO_DENEME_ANAHTAR, OTO_ATANAN_ANAHTAR };
 })();

@@ -60,7 +60,12 @@
       zayif: hepsi.filter(g => g.adet < esik).sort((a,b) => b.adet - a.adet)
     };
   }
-  function turOrtalamalari(){ return grupPuan(k => (k.tur || '').trim(), TUR_ESIK); }
+  function turOrtalamalari(){
+    /* v91: gruplama HAM tür değeriyle (istatistik sadakati), yalnız görünen ad kısalır */
+    const s = grupPuan(k => (k.tur || '').trim(), TUR_ESIK);
+    const g = x => ({ ...x, ad: turGoster(x.ad) });
+    return { yeterli: s.yeterli.map(g), zayif: s.zayif.map(g) };
+  }
   function yazarOrtalamalari(){ return grupPuan(k => (k.yazar || '').trim(), YAZAR_ESIK); }
 
   function barSatirlari(liste){

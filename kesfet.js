@@ -137,7 +137,8 @@
       '</div>';
     if(turler.length)
       html += '<div class="ks-suz"><span class="ks-suz-ad">Tür</span>' +
-        turler.map(t => chip('tur', t, t, S.tur === t)).join('') + '</div>';
+        /* v91: çip DEĞERİ ham tür (süzgeç eşleşmesi k.tur ile), etiketi görünen ad */
+        turler.map(t => chip('tur', t, turGoster(t), S.tur === t)).join('') + '</div>';
     if(raflar.length)
       html += '<div class="ks-suz"><span class="ks-suz-ad">Raf</span>' +
         raflar.map(r => chip('raf', r, r, S.raf === r)).join('') + '</div>';
@@ -442,10 +443,10 @@
     if(aday.okuyan > 0) kaynakParca.push(binlik(aday.okuyan) + ' okur');
     if(aday.puan > 0) kaynakParca.push('★' + ondalik(aday.puan));
     if(kaynakParca.length)
-      parcalar.push('1000Kitap\'ta ' + (ayni ? '' : kaynakTur.ad + ' içinde ')
+      parcalar.push('1000Kitap\'ta ' + (ayni ? '' : turGoster(kaynakTur.ad) + ' içinde ')
         + kaynakParca.join(', '));
     else if(!ayni)
-      parcalar.push('1000Kitap\'ta ' + kaynakTur.ad + ' türünden');
+      parcalar.push('1000Kitap\'ta ' + turGoster(kaynakTur.ad) + ' türünden');
     return parcalar.join(' · ');
   }
 

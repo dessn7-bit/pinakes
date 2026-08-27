@@ -118,8 +118,8 @@
         if(!sinyalVar){
           genel = GENEL_SINYALSIZ[sSayac % GENEL_SINYALSIZ.length]; sSayac++;
         }else if(b.tur > 0 && o.kitap.tur &&
-                 !kullanilan.has(o.kitap.tur + ' türünden kitapları beğeniyorsun')){
-          genel = o.kitap.tur + ' türünden kitapları beğeniyorsun';
+                 !kullanilan.has(turGoster(o.kitap.tur) + ' türünden kitapları beğeniyorsun')){
+          genel = turGoster(o.kitap.tur) + ' türünden kitapları beğeniyorsun';
         }else{
           genel = GENEL_ORTAK[oSayac % GENEL_ORTAK.length]; oSayac++;
         }
@@ -252,7 +252,7 @@
           const ort = t.toplam / t.n;
           b.tur = (ort - 5.5) / 4.5 * AGIRLIK.tur;
           if(b.tur > 0)
-            cumleler.tur = k.tur + ' türünde ' + t.n + ' kitaba ortalama ' + fmt(ort) + ' verdin';
+            cumleler.tur = turGoster(k.tur) + ' türünde ' + t.n + ' kitaba ortalama ' + fmt(ort) + ' verdin';
         }
       }
       const ortak = (k.etiketler || []).filter(e => sevilen.has(iKat(e)));
@@ -460,7 +460,9 @@
       .filter(t => t.n >= MIN_TUR_KITAP && t.ort >= SEVILEN_TUR_ORT)
       .sort((a, b) => b.ort - a.ort || b.n - a.n)
       .map(t => ({ ...t,
-        cumle: t.ad + ' türünde ' + t.n + ' kitap bitirdin, ortalama ' + fmt(t.ort) + ' verdin' }));
+        /* v91: ad EŞLEŞME anahtarı olarak ham kalır (kesfet turEsle/turAnahtar
+           bunu taksonomiye eşler) — yalnız görünen cümle kısaltılır */
+        cumle: turGoster(t.ad) + ' türünde ' + t.n + ' kitap bitirdin, ortalama ' + fmt(t.ort) + ' verdin' }));
   }
 
   window.__oneri = { hesapla, hesaplaHam, cesitlilikSec, nedenAta,

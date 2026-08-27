@@ -1746,7 +1746,7 @@ function depoYukle(){
   try{
     const raw = localStorage.getItem(DEPO);
     if(!raw) return { kitaplar:[], hedef:{}, hedefG:{}, hedefSayfa:{}, hedefSayfaG:{},
-      silinenler:{}, kesfetGizli:{}, kesfetGizliGeri:{}, turRed:{} };
+      silinenler:{}, kesfetGizli:{}, kesfetGizliGeri:{}, turRed:{}, turRedGeri:{} };
     const v = JSON.parse(raw);
     return {
       kitaplar: Array.isArray(v.kitaplar) ? v.kitaplar.map(kitapNormalize) : [],
@@ -1763,10 +1763,13 @@ function depoYukle(){
       /* turRed (v66): otomatik türü GERİ ALINAN kitaplar {kitapId: zaman} —
          kalıcı red, kesfetGizli ile aynı öz-damgalı union deseni. Düşerse
          öbür cihazın açılış taraması reddedilen türü yeniden yazardı. */
-      turRed: damgaSuz(v.turRed)
+      turRed: damgaSuz(v.turRed),
+      /* turRedGeri (v91): reddin GERİ ALMA kayıtları — kesfetGizliGeri'nin
+         birebiri (union'dan silme dirilir; etkin red = red damgası > geri). */
+      turRedGeri: damgaSuz(v.turRedGeri)
     };
   }catch(e){ return { kitaplar:[], hedef:{}, hedefG:{}, hedefSayfa:{}, hedefSayfaG:{},
-    silinenler:{}, kesfetGizli:{}, kesfetGizliGeri:{}, turRed:{} }; }
+    silinenler:{}, kesfetGizli:{}, kesfetGizliGeri:{}, turRed:{}, turRedGeri:{} }; }
 }
 function depoKaydet(){
   /* dönüş: yazım başarılı mı — senkron sarmalayıcısı parmak izini yalnız
@@ -2233,6 +2236,14 @@ function iKatla(s){
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function escAttr(s){ return esc(s); }
+/* ---------- Tür GÖRÜNEN adı (v91) ----------
+   k.tur değeri 1000Kitap taksonomisinin KENDİ adıdır ve öyle kalır: otomatik
+   tür motoru, içe aktarım taksonomi kapısı, Keşfet tür rafı ve yerleşik liste
+   hep bu ada eşler — değeri kısaltmak doğrulamayı kırardı. Kısaltma yalnız
+   EKRANDA; kayıt/eşleşme her yerde tam ad. Form alanı (f-tur) bilerek ham
+   değeri gösterir: orası değerin kendisinin düzenlendiği tek yer. */
+const TUR_GORUNEN = { 'Bilim-Teknoloji-Mühendislik': 'Bilim' };
+function turGoster(t){ return TUR_GORUNEN[t] || t; }
 /* ---------- İkon kütüphanesi ----------
    Tek çizgi ağırlığında (stroke 1.8, yuvarlak uç), currentColor, 24×24.
    Emoji ikon dili KALDIRILDI: platforma göre değişen çizim yerine her cihazda
@@ -3189,7 +3200,7 @@ function detayAc(id){
   kEkle('Türkçe adı', k.adTr ? esc(k.adTr) : '');   // kimlik grubunda (v73)
   kEkle('Sayfa', k.sayfa ? String(k.sayfa) : '');
   kEkle('İlk basım', k.yil ? String(k.yil) : '');
-  kEkle('Tür', k.tur ? esc(k.tur) : '');
+  kEkle('Tür', k.tur ? esc(turGoster(k.tur)) : '');
   kEkle('Seri', k.seri ? esc(k.seri) + (k.ciltNo ? ' · ' + k.ciltNo + '. cilt' : '') : '');
   kEkle('Çevirmen', k.cevirmen ? esc(k.cevirmen) : '');
   kEkle('Dil', k.dil ? esc(String(k.dil).toUpperCase()) : '');
@@ -3614,7 +3625,7 @@ function istCiz(){
   if(turler.length){
     const maxT = turler[0][1];
     html += `<div class="ist-bolum-baslik" id="istTurler">Türlere göre (tüm raf)</div>` +
-      turler.map(([t,n]) => istBar(esc(t), n, Math.round(n/maxT*100))).join('');
+      turler.map(([t,n]) => istBar(esc(turGoster(t)), n, Math.round(n/maxT*100))).join('');
   }
   const enIyi = [...puanlilar].sort((a,b) => b.puan - a.puan).slice(0,5);
   if(enIyi.length){
@@ -3819,6 +3830,8 @@ function iceAktar(dosya){
         veri.kesfetGizliGeri = { ...y.kesfetGizliGeri, ...(veri.kesfetGizliGeri || {}) };   // v62: geri almalar da döner
       if(y.turRed && typeof y.turRed === 'object')
         veri.turRed = { ...y.turRed, ...(veri.turRed || {}) };   // v66: tür redleri yedekten döner
+      if(y.turRedGeri && typeof y.turRedGeri === 'object')
+        veri.turRedGeri = { ...y.turRedGeri, ...(veri.turRedGeri || {}) };   // v91: defterden çıkarmalar da döner
       /* ozetler (v80): yedekteki özet metinleri IDB'ye döner — yerelde daha
          YENİ damgalı kayıt varsa ezilmez (yedek eski olabilir). Asenkron;
          işaretler kaydetHam içinde güncellenir, ikinci depoKaydet ile oturur.
@@ -4768,7 +4781,8 @@ document.addEventListener('click', e => {
           hedefSayfa: veri.hedefSayfa || {}, hedefSayfaG: veri.hedefSayfaG || {},
           silinenler: veri.silinenler || {}, kesfetGizli: veri.kesfetGizli || {},
           kesfetGizliGeri: veri.kesfetGizliGeri || {},
-          turRed: veri.turRed || {} };   // v66: tür redleri de kişisel tercihtir, korunur
+          turRed: veri.turRed || {},   // v66: tür redleri de kişisel tercihtir, korunur
+          turRedGeri: veri.turRedGeri || {} };   // v91: defterden çıkarmalar da tercih
         if(window.__kapak) window.__kapak.hepsiniSil(true); // kapak fotoğrafları da yetim kalmasın
         depoKaydet(); hepsiniCiz(); toast('Kütüphane boşaltıldı — hedeflerin duruyor');
       }

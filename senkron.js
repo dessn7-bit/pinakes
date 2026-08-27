@@ -200,6 +200,7 @@
       veri.kesfetGizli = bir.kesfetGizli || {};
       veri.kesfetGizliGeri = bir.kesfetGizliGeri || {};
       veri.turRed = bir.turRed || {};
+      veri.turRedGeri = bir.turRedGeri || {};
       return true;
     }catch(e){ window._iz && window._iz('sekmeUzlas', e); return false; }
   }
@@ -491,6 +492,13 @@
     const turRed = { ...((uzak && uzak.turRed) || {}) };
     for(const [id, t] of Object.entries((yerel && yerel.turRed) || {}))
       if(!turRed[id] || t > turRed[id]) turRed[id] = t;
+    /* turRedGeri (v91): reddin GERİ ALMA kayıtları — kesfetGizliGeri deseninin
+       birebiri. Union'dan kayıt silmek öbür cihazdan dirilirdi; geri alma ayrı
+       öz-damgalı haritada yaşar. Etkin red = red damgası > geri damgası
+       (zengin.js redAktif). */
+    const turRedGeri = { ...((uzak && uzak.turRedGeri) || {}) };
+    for(const [id, t] of Object.entries((yerel && yerel.turRedGeri) || {}))
+      if(!turRedGeri[id] || t > turRedGeri[id]) turRedGeri[id] = t;
 
     const ciftler = new Map();   // id → { u: uzak kopya, y: yerel kopya }
     ((uzak && uzak.kitaplar) || []).forEach(k => { if(k && k.id) ciftler.set(k.id, { u: k }); });
@@ -527,7 +535,7 @@
       const yg = ((yerel && yerel.hedefSayfaG) || {})[yil] || 0;
       if(!(yil in hedefSayfa) || yg >= (hedefSayfaG[yil]||0)){ hedefSayfa[yil] = v; hedefSayfaG[yil] = yg; }
     }
-    return { kitaplar, hedef, hedefG, hedefSayfa, hedefSayfaG, silinenler, kesfetGizli, kesfetGizliGeri, turRed };
+    return { kitaplar, hedef, hedefG, hedefSayfa, hedefSayfaG, silinenler, kesfetGizli, kesfetGizliGeri, turRed, turRedGeri };
   }
 
   /* ---------- senkron ---------- */
@@ -612,6 +620,7 @@
         veri.kesfetGizli = bir.kesfetGizli || {};
         veri.kesfetGizliGeri = bir.kesfetGizliGeri || {};
         veri.turRed = bir.turRed || {};
+        veri.turRedGeri = bir.turRedGeri || {};
         /* M4b: önce depo, başarılıysa parmak izi — ters sıra kota hatasında
            taze iz + bayat depo uyumsuzluğu bırakıyordu */
         let depoTamam = true;

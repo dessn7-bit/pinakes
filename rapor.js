@@ -205,7 +205,7 @@
     if((ozet.enCokYazar || ozet.enCokTur) && y < H - 190){
       c.fillStyle = RENK.soluk; c.font = '30px ' + SANS;
       const alt = [ozet.enCokYazar ? 'En çok: ' + ozet.enCokYazar[0] + ' (' + ozet.enCokYazar[1] + ')' : '',
-        ozet.enCokTur ? ozet.enCokTur[0] + ' (' + ozet.enCokTur[1] + ')' : ''].filter(Boolean).join(' · ');
+        ozet.enCokTur ? turGoster(ozet.enCokTur[0]) + ' (' + ozet.enCokTur[1] + ')' : ''].filter(Boolean).join(' · ');
       c.fillText(kirp(c, alt, enG), kenar, H - 150);
     }
     c.fillStyle = RENK.pirinc; c.fillRect(kenar, H - 96, 72, 5);
@@ -320,7 +320,7 @@
     }
     const ekstra = [];
     if(o.enCokYazar) ekstra.push(['En çok okuduğun yazar', o.enCokYazar[0] + ' (' + o.enCokYazar[1] + ')']);
-    if(o.enCokTur) ekstra.push(['En çok tür', o.enCokTur[0] + ' (' + o.enCokTur[1] + ')']);
+    if(o.enCokTur) ekstra.push(['En çok tür', turGoster(o.enCokTur[0]) + ' (' + o.enCokTur[1] + ')']);
     if(o.ilk) ekstra.push(['Yılın ilk kitabı', o.ilk.ad]);
     if(o.son && o.kitap > 1) ekstra.push(['Yılın son kitabı', o.son.ad]);
     if(ekstra.length){

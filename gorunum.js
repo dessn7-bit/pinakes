@@ -201,7 +201,10 @@
   const GRUP_DURUM_SIRA = ['Okunuyor', 'Okunacak', 'Yarım', 'Okundu'];
   function grupBaslik(k){
     if(grup === 'durum') return GRUP_DURUM_AD[k.durum] || 'Okunacak';
-    if(grup === 'tur') return String(k.tur||'').trim() || '— tür belirtilmemiş —';
+    /* v91: tür başlığı GÖRÜNEN adla — grupla(ma) anahtarı da görünen ad olur;
+       elle "Bilim" yazılmış kitapla kısaltılan tür aynı başlıkta toplanır
+       (bilinçli: kullanıcı için ikisi aynı raf başlığıdır). */
+    if(grup === 'tur'){ const t = String(k.tur||'').trim(); return t ? turGoster(t) : '— tür belirtilmemiş —'; }
     if(grup === 'yazar') return String(k.yazar||'').trim() || '— yazar belirtilmemiş —';
     if(grup === 'raf') return String(k.raf||'').trim() || '— raf belirtilmemiş —';
     return '';
