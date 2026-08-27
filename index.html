@@ -2242,7 +2242,22 @@ function escAttr(s){ return esc(s); }
    hep bu ada eşler — değeri kısaltmak doğrulamayı kırardı. Kısaltma yalnız
    EKRANDA; kayıt/eşleşme her yerde tam ad. Form alanı (f-tur) bilerek ham
    değeri gösterir: orası değerin kendisinin düzenlendiği tek yer. */
-const TUR_GORUNEN = { 'Bilim-Teknoloji-Mühendislik': 'Bilim' };
+const TUR_GORUNEN = {
+  'Bilim-Teknoloji-Mühendislik': 'Bilim',
+  /* v92: kütüphanede kitabı olanlar */
+  'Parapsikoloji-Spiritüalizm': 'Parapsikoloji',
+  'Efsaneler-Destanlar': 'Destan',
+  'Anı-Mektup-Günlük': 'Anı',
+  'Siyaset-Politika': 'Siyaset',
+  /* v92: ileride kitap girerse hazır */
+  'Sözlük-Kılavuz Kitap-Ansiklopedi': 'Başvuru',
+  'Tasavvuf-Mezhepler-Tarikatlar': 'Tasavvuf',
+  'Aile (Kadın, Erkek ve Çocuk)': 'Aile',
+  'Astroloji-Fal-Rüya Tabirleri': 'Astroloji',
+  'Özlü Sözler-Duvar Yazıları': 'Özlü Sözler',
+  'Ekonomi-Emek-İş Dünyası': 'Ekonomi',
+  'Antropoloji-Etnoloji': 'Antropoloji'
+};
 function turGoster(t){ return TUR_GORUNEN[t] || t; }
 /* ---------- İkon kütüphanesi ----------
    Tek çizgi ağırlığında (stroke 1.8, yuvarlak uç), currentColor, 24×24.

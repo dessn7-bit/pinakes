@@ -320,23 +320,80 @@
     }
     return sonuc;
   }
+  /* ---------- KURGU KORUMASI (v92) ----------
+     v91 teşhisinin sınıfı: "kategoriler arasında geliş sırası kazanır" kuralı
+     tarihsel KURGUYU konu etiketine yeniriyordu — Üç Silahşor "History ·
+     Fiction · France" → Tarih; Taras Bulba'nın kararı GB'nin o günkü
+     sıralamasına bağlıydı (kararlı değil). İki kural:
+     1) KURGU ÜSTÜNLÜĞÜ: kategorilerde kurgu İŞARETİ (fiction / novel(s) /
+        romanı; 'roman' yalnız TAM kategori — "Roman Empire" tuzağı;
+        non(-)fiction'lı kategori işaret DEĞİL) varsa kurgu-dışı hedefler
+        bastırılır. İşaret hedef SEÇMEZ: kurgu sınıfı İÇİNDE spesifik tür
+        (Tiyatro, Hikaye, Şiir, Bilim-Kurgu…) jenerikten (Roman, Edebiyat)
+        önce gelir — "Fiction" kategorisi Tiyatro'yu Roman'a ezmez. Geliş
+        sırası artık yalnız EŞİT sınıf içinde hüküm sürer.
+     2) KARARSIZLIK KORUMASI: kurgu işareti varken BİRDEN ÇOK FARKLI
+        kurgu-dışı aday varsa (Taras Bulba: Felsefe+Mizah+Tarih) kategori
+        seti farklı baskı/derlemelerden karışmıştır — tür YAZILMAZ, boş
+        kalır: yanlış tür boş türden kötüdür, kullanıcı elle girer. TEK
+        kurgu-dışı aday klasik konu-etiketi desenidir (tarihsel roman:
+        History) — bastırılır, kurgu yazılır. */
+  const KURGU_TURLER = new Set(['Bilim-Kurgu', 'Çocuk', 'Gençlik', 'Fantastik',
+    'Korku-Gerilim', 'Polisiye', 'Macera-Aksiyon', 'Aşk', 'Çizgi-Roman', 'Manga',
+    'Masal', 'Hikaye (Öykü)', 'Şiir', 'Tiyatro', 'Roman', 'Edebiyat',
+    'Dünya Klasikleri', 'Türk Klasikleri', 'Halk Edebiyatı', 'Mitolojiler',
+    'Efsaneler-Destanlar']);
+  const JENERIK_KURGU = new Set(['Roman', 'Edebiyat']);
+  /* UYARLAMA sinyali: yaş/biçim uyarlaması baskıların kategorileri (çocuk
+     kısaltması, gençlik baskısı, grafik roman). Canlı kanıt: Sapiens'in
+     grafik uyarlama baskılarının "Comics & Graphic Novels" + "Young Adult
+     Nonfiction" etiketleri ana kitabı (Tarih) Gençlik'e çeviriyordu. */
+  const UYARLAMA_RX = /\bjuvenile\b|\byoung adult\b|\bcomics\b|\bgraphic novels?\b/;
+  function kurguIsaret(kategoriler){
+    if(!Array.isArray(kategoriler)) return false;
+    for(const kat of kategoriler){
+      const m = katla(kat);
+      if(/\bnon-?fiction\b/.test(m)) continue;   // "Juvenile Non-Fiction" kurgu işareti değil
+      if(UYARLAMA_RX.test(m)) continue;          // uyarlama etiketi kurgu BEYANI değil
+      if(/\bfiction\b|\bnovels?\b|\bromani\b/.test(m) || m === 'roman') return true;
+    }
+    return false;
+  }
   function turCevir(kategoriler){
     if(!taksonomi) return '';
+    /* taksonomi-geçen adaylar, geliş sırasıyla, tekrarsız (iki kapı AYNEN) */
+    const gecenler = [];
     for(const hedefAd of turAdaylari(kategoriler)){
-      /* canlı taksonomi doğrulaması: ad ya da seo katlaması eşleşmeli */
       const hedef = katla(hedefAd);
       const t = taksonomi.find(x => katla(x.ad) === hedef || katla(x.seo) === hedef);
-      if(t) return t.ad;   // İLK güvenli eşleşme kazanır
+      if(t && gecenler.indexOf(t.ad) < 0) gecenler.push(t.ad);
     }
-    return '';
+    if(!gecenler.length) return '';
+    if(!kurguIsaret(kategoriler)) return gecenler[0];   // işaretsiz: eski davranış birebir
+    const kurgular = gecenler.filter(a => KURGU_TURLER.has(a));
+    const kurguDisi = gecenler.filter(a => !KURGU_TURLER.has(a));
+    if(kurguDisi.length >= 2) return '';   // kararsızlık: çelişen konu etiketleri
+    if(!kurgular.length) return '';        // işaret kurgu diyor ama kurgu hedefi taksonomide yok
+    const spesifik = kurgular.find(a => !JENERIK_KURGU.has(a));
+    return spesifik || kurgular[0];
   }
   /* KapıSIZ çeviri (v77): yalnız KIYAS için — kitap kaydına ASLA yazılmaz. */
   function turCevirHam(kategoriler){ return turAdaylari(kategoriler)[0] || ''; }
-  /* Başlığı uyan adayların kategorileri — aday sırası korunur, tekrarsız. */
+  /* Başlığı uyan adayların kategorileri — aday sırası korunur, tekrarsız.
+     UYARLAMA KAPISI (v92, juvenile kuralının genellemesi): uyarlama etiketi
+     (Juvenile*, Young Adult*, Comics/Graphic Novels) ancak başlığı uyan TÜM
+     adaylar uyarlama-etiketliyse hayatta kalır; kategoriSİZ uyan baskı da
+     "uyarlama değil" sayılır. Canlı kanıtlar: Siyah Lale'nin 2 uyan
+     baskısından biri kategorisiz, öbürü Juvenile — tek kısaltılmış çocuk
+     baskısı klasiği Çocuk yapamaz; Sefiller'in 10 baskısının 3'ü juvenile;
+     Sapiens'in grafik/gençlik uyarlamaları ana kitabı Tarih'ten ediyordu.
+     Maliyet: kategorisiz baskısı olan GERÇEK çocuk kitabı / çizgi roman
+     boş kalır — yanlış tür boş türden kötü (bilinçli). */
   function kategoriTopla(adaylar, kitapAd){
-    const gorulen = {}, sonuc = [];
+    const gorulen = {}, sonuc = [], uyanlar = [];
     for(const v of adaylar){
       if(!baslikUyar(kitapAd, v.title)) continue;
+      uyanlar.push(v);
       for(const kat of (v.categories || [])){
         const anah = katla(kat);
         if(gorulen[anah]) continue;
@@ -344,7 +401,10 @@
         sonuc.push(kat);
       }
     }
-    return sonuc;
+    const hepsiUyarlama = uyanlar.length > 0 && uyanlar.every(v =>
+      (v.categories || []).some(kat => UYARLAMA_RX.test(katla(kat))));
+    return hepsiUyarlama ? sonuc
+      : sonuc.filter(kat => !UYARLAMA_RX.test(katla(kat)));
   }
   /* Tek kitap için bulunanlar: yalnız EKSİK alanlar sorgulanır/derlenir.
      İstek bütçesi kitap başına ≤2 KORUNUR: dar + en çok BİR gevşek sorgu.
@@ -1847,7 +1907,7 @@
 
   /* test kancaları + otoTur (v65: ekleme akışlarının kayıt-anı tür motoru)
      + v66: açılış taraması / geri alma yüzeyi */
-  window.__zengin = { eksikSayim, alanBos, turCevir, turCevirHam, baslikUyar, kitapSorgula, uygula,
+  window.__zengin = { eksikSayim, alanBos, turCevir, turCevirHam, kategoriTopla, kurguIsaret, baslikUyar, kitapSorgula, uygula,
     kuyrukYukle, kuyrukKaydet, kuyrukTemizle, puanlanacaklar, tarihsizler, durumTazele,
     otoTur, otoAdaylar, atananGecerli, taksonomiKur: t => { taksonomi = t; },
     redAktif, redListesi,   // v91: geri alma defteri
