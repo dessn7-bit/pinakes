@@ -349,6 +349,26 @@
      grafik uyarlama baskılarının "Comics & Graphic Novels" + "Young Adult
      Nonfiction" etiketleri ana kitabı (Tarih) Gençlik'e çeviriyordu. */
   const UYARLAMA_RX = /\bjuvenile\b|\byoung adult\b|\bcomics\b|\bgraphic novels?\b/;
+  /* BAŞLIK UYARLAMA SÜZGECİ (v93): uyarlama baskılar kategori kapısından önce
+     BAŞLIK eşleşmesinden de yakalanır. Canlı kanıt: GB, "GENÇLER İÇİN NUTUK"
+     baskısına düpedüz yanlış "Fiction" basmış — o baskı eşleşmeye girince
+     kurgu/kurgu-dışı çelişkisi doğuyor, kararsızlık koruması Nutuk'u boş
+     bırakıyordu (v92 öncesi Tarih'ti). Başlığında uyarlama işareti taşıyan
+     baskı DIŞLANIR, kategorileri hiç okunmaz. YANLIŞ POZİTİF koruması:
+     kullanıcının KENDİ kitap adında da işaret varsa ("Çocuklar İçin Felsefe",
+     "Resimli Türk Edebiyatı Tarihi" gerçek adlardır) süzgeç uygulanmaz —
+     kitabın kendisi zaten o kitap. Kalıplar katla-normalize + kelime sınırı. */
+  const BASLIK_UYARLAMA = ['gencler icin', 'cocuklar icin', 'kisaltilmis',
+    'sadelestirilmis', 'ozetlenmis', 'resimli', 'adapted', 'abridged', 'retold',
+    'simplified', 'for children', 'for young readers', 'young readers edition',
+    'graphic novel', 'illustrated edition', "children's edition", 'junior edition'];
+  const BASLIK_UYARLAMA_RX = BASLIK_UYARLAMA.map(k =>
+    new RegExp('\\b' + rxKac(k) + '\\b'));
+  function baslikUyarlama(baslik){
+    const m = katla(baslik);
+    if(!m) return false;
+    return BASLIK_UYARLAMA_RX.some(rx => rx.test(m));
+  }
   function kurguIsaret(kategoriler){
     if(!Array.isArray(kategoriler)) return false;
     for(const kat of kategoriler){
@@ -391,8 +411,13 @@
      boş kalır — yanlış tür boş türden kötü (bilinçli). */
   function kategoriTopla(adaylar, kitapAd){
     const gorulen = {}, sonuc = [], uyanlar = [];
+    /* v93 başlık süzgeci: kullanıcının kitap adı işaretsizse, başlığı uyarlama
+       işaretli baskı hiç değerlendirilmez. Süzgeç sonrası uyan kalmazsa sonuç
+       boş — uyarlama baskı dışında kaynak yoksa karar verecek veri yok. */
+    const kitapIsaretli = baslikUyarlama(kitapAd);
     for(const v of adaylar){
       if(!baslikUyar(kitapAd, v.title)) continue;
+      if(!kitapIsaretli && baslikUyarlama(v.title)) continue;
       uyanlar.push(v);
       for(const kat of (v.categories || [])){
         const anah = katla(kat);
@@ -1907,7 +1932,7 @@
 
   /* test kancaları + otoTur (v65: ekleme akışlarının kayıt-anı tür motoru)
      + v66: açılış taraması / geri alma yüzeyi */
-  window.__zengin = { eksikSayim, alanBos, turCevir, turCevirHam, kategoriTopla, kurguIsaret, baslikUyar, kitapSorgula, uygula,
+  window.__zengin = { eksikSayim, alanBos, turCevir, turCevirHam, kategoriTopla, kurguIsaret, baslikUyarlama, baslikUyar, kitapSorgula, uygula,
     kuyrukYukle, kuyrukKaydet, kuyrukTemizle, puanlanacaklar, tarihsizler, durumTazele,
     otoTur, otoAdaylar, atananGecerli, taksonomiKur: t => { taksonomi = t; },
     redAktif, redListesi,   // v91: geri alma defteri
