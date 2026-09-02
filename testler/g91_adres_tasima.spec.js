@@ -30,6 +30,10 @@ test.describe('G91 sw — önek scope\'tan, temizlik önek-sınırlı', () => {
 
   test('CACHE adı yola göre; activate kardeş adresin kovasına dokunmaz', async () => {
     const kaynak = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
+    /* v95: sürüm kaynaktan çekilir (g50 deseni) — anahtarlar sabit yazılıydı,
+       her CACHE artışı vakayı kırıyordu. Niyet sürümden bağımsız: yalnız
+       KENDİ önekinin bayat kovası silinir, kardeş önek + OCR kovası durur. */
+    const N = Number(kaynak.match(/const CACHE = ONEK \+ '-v(\d+)'/)[1]);
     async function aktive(yol){
       const dinleyiciler = {};
       const silinen = [];
@@ -37,8 +41,8 @@ test.describe('G91 sw — önek scope\'tan, temizlik önek-sınırlı', () => {
         addEventListener: (ad, cb) => { dinleyiciler[ad] = cb; },
         skipWaiting: () => {}, clients: { claim: () => {} } };
       const sahteCaches = {
-        keys: () => Promise.resolve(['kitaplik-v93', 'kitaplik-v94', 'pinakes-v93',
-          'pinakes-v94', 'kk_ocr_paket_v1']),
+        keys: () => Promise.resolve(['kitaplik-v' + (N - 1), 'kitaplik-v' + N,
+          'pinakes-v' + (N - 1), 'pinakes-v' + N, 'kk_ocr_paket_v1']),
         delete: k => { silinen.push(k); return Promise.resolve(true); },
         open: () => Promise.resolve({ addAll: () => Promise.resolve(),
           match: () => Promise.resolve(undefined), put: () => Promise.resolve() })
@@ -51,10 +55,10 @@ test.describe('G91 sw — önek scope\'tan, temizlik önek-sınırlı', () => {
     }
     expect(await aktive('/kitaplik/sw.js'),
       'eski adres yalnız KENDİ eski sürümünü siler; OCR ve pinakes kovaları durur')
-      .toEqual(['kitaplik-v93']);
+      .toEqual(['kitaplik-v' + (N - 1)]);
     expect(await aktive('/pinakes/sw.js'),
       'yeni adres yalnız pinakes-eskiyi siler — kitaplik kovaları DURUR')
-      .toEqual(['pinakes-v93']);
+      .toEqual(['pinakes-v' + (N - 1)]);
   });
 });
 

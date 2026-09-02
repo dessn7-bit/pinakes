@@ -7,7 +7,7 @@ function gbYanit(kitaplar) {
     items: kitaplar.map(k => ({ volumeInfo: {
       title: k.ad, authors: k.yazar ? [k.yazar] : [],
       publisher: k.yayinevi || '', publishedDate: k.yil ? String(k.yil) : '',
-      pageCount: k.sayfa || 0, language: 'tr',
+      pageCount: k.sayfa || 0, language: k.dil || 'tr',
       imageLinks: null
     } }))
   };
@@ -51,8 +51,43 @@ test.describe('G2 arama ve kaynaklar', () => {
     ] };
     await page.fill('#f-ad', 'simyacı');
     await expect(page.locator('#olSonuc .ol-item')).toHaveCount(2);
-    await expect(page.locator('#olSonuc .ol-item >> nth=0')).toContainText('Goodreads');
-    await expect(page.locator('#olSonuc .ol-item >> nth=1')).toContainText('1000Kitap');
+    /* v95 trPuan: 1000Kitap kaynağı +2 aldığı için Goodreads'in ÜSTÜNE çıkar —
+       eski vaka kaynak sırasını (gb→wk geliş sırası) donduruyordu, o sıra
+       davranış değil rastlantıydı. İkisi de listede: süzme yok. */
+    await expect(page.locator('#olSonuc .ol-item >> nth=0')).toContainText('1000Kitap');
+    await expect(page.locator('#olSonuc .ol-item >> nth=1')).toContainText('Goodreads');
+  });
+
+  test('Türkçe aday üste sıralanır; yabancı adaylar listeden ATILMAZ (v95 trPuan)', async ({ page }) => {
+    await formAc(page);
+    page.__agAyar.google = gbYanit([
+      { ad: 'An Actor Prepares', yazar: 'Constantin Stanislavski', dil: 'en' },
+      { ad: 'Building a Character', yazar: 'Constantin Stanislavski', dil: 'en' }
+    ]);
+    page.__agAyar.worker = { sonuclar: [
+      { ad: 'Bir Aktör Hazırlanıyor', yazar: 'Konstantin Stanislavski', kaynak: '1000Kitap ★8.9' }
+    ] };
+    await page.fill('#f-ad', 'stanislavski');
+    // sıralama süzme değil: 3 aday, 3 satır
+    await expect(page.locator('#olSonuc .ol-item')).toHaveCount(3);
+    await expect(page.locator('#olSonuc .ol-item >> nth=0')).toContainText('Bir Aktör Hazırlanıyor');
+    // İngilizce baskılar hâlâ listede — rafta yabancı kitap da var
+    await expect(page.locator('#olSonuc')).toContainText('An Actor Prepares');
+    await expect(page.locator('#olSonuc')).toContainText('Building a Character');
+  });
+
+  test('slice sıralamadan SONRA: 9. gelen Türkçe aday listeye girer (v95)', async ({ page }) => {
+    await formAc(page);
+    // 8 İngilizce Google adayı + worker'dan 1 Türkçe: eski kod (slice önce)
+    // Türkçe adayı listeye hiç sokmuyordu.
+    page.__agAyar.google = gbYanit(Array.from({ length: 8 }, (_, i) =>
+      ({ ad: 'English Book ' + (i + 1), yazar: 'Writer ' + (i + 1), dil: 'en' })));
+    page.__agAyar.worker = { sonuclar: [
+      { ad: 'Türkçe Dokuzuncu', yazar: 'Yerli Yazar', kaynak: '1000Kitap' }
+    ] };
+    await page.fill('#f-ad', 'dokuzuncu');
+    await expect(page.locator('#olSonuc .ol-item')).toHaveCount(8); // tavan 8 korunur
+    await expect(page.locator('#olSonuc .ol-item >> nth=0')).toContainText('Türkçe Dokuzuncu');
   });
 
   test('aynı kitap iki kaynaktan gelirse tek satır görünür', async ({ page }) => {

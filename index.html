@@ -2740,6 +2740,22 @@ function aramaTur(slug, sayfa, sinyal){
       sonuclar: (j.sonuclar || []).filter(a => a && a.ad) }));
 }
 window.__ara = { google: aramaGoogle, worker: aramaWorker, turler: aramaTurler, tur: aramaTur };
+/* v95: Türkçe baskı SIRALAMA puanı — süzme DEĞİL. Hiçbir aday atılmaz;
+   rafta yabancı kitap da var, kullanıcı onları da ekleyebilmeli. Puan yalnız
+   listede kimin üstte duracağını belirler; eşit puanlılar özgün sırasını korur. */
+function trPuan(a){
+  const TRC = /[çğıİöşüÇĞÖŞÜ]/;
+  let p = 0;
+  const dil = String(a.dil || '').toLowerCase();
+  if(dil === 'tr') p += 3;
+  else if(dil) p -= 3;
+  if(String(a.kaynak || '').indexOf('1000Kitap') >= 0) p += 2;
+  if(TRC.test(a.ad || '')) p += 2;
+  if(TRC.test(a.yayinevi || '') || TRC.test(a.yazar || '')) p += 1;
+  const isbn = String(a.isbn || '').replace(/[^0-9X]/gi, '');
+  if(/^(978605|978625|978975|9789944)/.test(isbn)) p += 1;
+  return p;
+}
 async function canliAra(q){
   sonAramaMetni = q;
   const dEl = document.getElementById('olDurum'), sEl = document.getElementById('olSonuc');
@@ -2759,7 +2775,14 @@ async function canliAra(q){
     .catch(e => { agSorunu = true; return []; });
 
   const [gb, wk] = await Promise.all([gbSoz, wSoz]);
-  let adaylar = araTekillestir([...gb, ...wk]).slice(0, 8);
+  /* v95: slice sıralamadan SONRA — önce kesilseydi 9. sıradaki Türkçe baskı
+     listeye hiç giremezdi. i = eşit puanlıların özgün sırası (kararlı sıralama). */
+  let adaylar = araTekillestir([...gb, ...wk]);
+  adaylar = adaylar
+    .map((a, i) => ({ a, i, p: trPuan(a) }))
+    .sort((x, y) => y.p - x.p || x.i - y.i)
+    .map(o => o.a)
+    .slice(0, 8);
 
   // 3) Son çare: Open Library
   if(!adaylar.length){
