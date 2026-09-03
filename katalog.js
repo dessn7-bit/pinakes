@@ -161,6 +161,41 @@
       (isbn && k.isbn === isbn) ||
       (kat(k.ad) === a && kat(k.yazar) === y));
   }
+  /* Yakın kayıt UYARICISI (v96) — süzme DEĞİL: hiçbir aday atılmaz, hiçbir
+     kayıt engellenmez; kitap yine eklenir, kullanıcı yalnız uyarılır.
+     Neden: kütüphanenin 242 kaydından 241'inde ISBN boş — zatenVar'ın ISBN
+     kolu mevcut kayıtlara karşı pratikte hiç çalışmıyor, her şey birebir
+     başlık eşitliğine kalıyor; seri taramada form açılmadığı için kullanıcı
+     benzer kaydı hiç görmüyordu. İki kol, ikisi de AYNI YAZAR kapısının ardında:
+       (1) adTr — "An Actor Prepares" elle eklenmiş, fiziksel Türkçe baskı
+           "Bir Aktör Hazırlanıyor" geliyor; ortak harfleri yok, yalnız Türkçe
+           ad alanından (kitapNormalize adTr / form f-adtr, v73) yakalanır.
+           Tam adTr eşitliği de BURADA uyarıdır: zatenVar adTr'ye bakmaz
+           (baksa ekleme ENGELİ olurdu — çeviri baskısı ayrı fiziksel kitaptır).
+       (2) önek — kısa olan ≥8 harf ve uzunun başlangıcı ("Harry Potter ve
+           Felsefe Taşı" / "… (Ciltli)"); "Dune"/"Dune Messiah" 4 harf → uyarı
+           YOK (yanlış pozitif, kaçırmaktan pahalı).
+     Birebir ad eşitliği zatenVar'ın işi, burada dışlanır — ekleme ÖNCESİ de
+     SONRASI da çağrılsa kayıt kendini bulmaz. */
+  function yakinKayit(ad, yazar){
+    const y = kat(yazar);
+    if(!y) return null;
+    const a = kat(ad);
+    if(!a) return null;
+    const benzer = (x, z) => {
+      if(!x || !z || x === z) return false;
+      const kisa = x.length < z.length ? x : z;
+      const uzun = x.length < z.length ? z : x;
+      return kisa.length >= 8 && uzun.startsWith(kisa);
+    };
+    return (veri.kitaplar||[]).find(k => {
+      if(kat(k.yazar||'') !== y) return false;
+      const b = kat(k.ad||'');
+      const t = kat(k.adTr||'');
+      if(a === b) return false;             // tam eşitlik zatenVar'ın işi
+      return a === t || benzer(a, b) || benzer(a, t);
+    }) || null;
+  }
   async function kodIsle(kod, elle){
     if(!window.__barkod || !window.__barkod.isbnGecerli(kod)){
       if(elle) bildir('Geçersiz ISBN');
@@ -192,6 +227,8 @@
       bildir('Zaten var: ' + k.ad);
       return;
     }
+    /* v96: yakınlık ekleme ÖNCESİ ölçülür, ekleme SONRASI söylenir — engel DEĞİL. */
+    const yakin = yakinKayit(k.ad, k.yazar);
     const durumSec = (document.getElementById('seriDurum')||{}).value || 'okunacak';
     const raf = ((document.getElementById('seriRaf')||{}).value || '').trim();
     const kayit = (typeof kitapNormalize === 'function' ? kitapNormalize : (x => x))({
@@ -222,7 +259,16 @@
     if(typeof hepsiniCiz === 'function') hepsiniCiz();
     oturumKayitlari.push({ id: kayit.id, ad: kayit.ad, yazar: kayit.yazar });
     listeCizSeri(); rafListesiDoldur(); bip();
-    if(not) not.textContent = 'Eklendi: ' + k.ad + ' — sıradakini okut.';
+    if(yakin){
+      /* v96: kayıt EKLENDİ, kullanıcı yalnız uyarılıyor — geri alma oturum
+         listesindeki ✕ ile zaten var. adTr'den yakalandıysa Türkçe adı da
+         yazılır ki "neden benzer" belli olsun. */
+      if(not) not.textContent = 'Eklendi: ' + k.ad + ' — DİKKAT: benzer kayıt zaten var: "' + yakin.ad + '"'
+        + (yakin.adTr ? ' (Türkçe adı: ' + yakin.adTr + ')' : '');
+      bildir('Benzer kayıt var: ' + yakin.ad);
+    }else{
+      if(not) not.textContent = 'Eklendi: ' + k.ad + ' — sıradakini okut.';
+    }
   }
   function geriAl(id){
     const i = (veri.kitaplar||[]).findIndex(k => k.id === id);
@@ -356,6 +402,6 @@
   if(document.querySelector('.yedek-wrap')) baslat();
   else document.addEventListener('DOMContentLoaded', baslat);
 
-  window.__katalog = { kodIsle, geriAl, zatenVar, seriAc, seriKapat, formAlaniEkle,
+  window.__katalog = { kodIsle, geriAl, zatenVar, yakinKayit, seriAc, seriKapat, formAlaniEkle,
     detayZenginlestir, rafListesiDoldur, oturum: () => oturumKayitlari };
 })();
