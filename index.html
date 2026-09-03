@@ -1258,9 +1258,11 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
              (kitap başına çok satır, yalnız EKLEME). Önizleme + onay aynen. -->
         <h3 class="ay-baslik">Not dosyası</h3>
         <p class="ay-not">Dışarıda hazırlanan not ve alıntı dosyasını toplu yükler. Kayıtlar ad + yazar ile
-      eşlenir; yalnızca ekleme yapar, var olan notlarına dokunmaz. Beklenen biçim:
+      eşlenir. Aynı dosyayı tekrar yüklersen daha önce bu yoldan gelen notlar yenisiyle değişir; uygulama
+      içinde kendi yazdığın not ve alıntılar korunur. İçe aktarılan bir notu kalıcı olarak saklamak istersen
+      kopyasını kendi notun olarak kaydet. Beklenen biçim:
       <b>{ "surum": 1, "not": [ {ad, yazar, metin, tip} ] }</b> — tip yalnız "not" ya da "alinti"; başka
-      değer taşıyan satır atlanır, önizlemede sayısı görünür. Aynı kitapta aynı metin varsa yeniden eklenmez.</p>
+      değer taşıyan satır atlanır, önizlemede sayısı görünür.</p>
         <div class="ay-eylem">
           <button class="btn btn-cerceve" data-act="zg-not-ice">Not dosyası seç</button>
         </div>
@@ -1740,6 +1742,14 @@ function kitapNormalize(k){
         ng: parseInt(n.ng) || 0,
         metin: String(n.metin), tarih: n.tarih || bugun(),
         sayfa: parseInt(n.sayfa) || null,
+        /* kayn (v99): 'dosya' = Not dosyası içe aktarımından geldi (zengin.js
+           ICE_NOT). Yeniden yüklemede YALNIZ bu işaretli notlar yenilenir; elle,
+           paylaşım, Goodreads notlarında alan YOK. Yalnız işaret VARKEN yazılır:
+           işaretsiz kayıtların normalize çıktısı bayt bayt aynı kalır → parmak
+           izleri değişmez, ANLIK_SURUM turu ve toplu yeniden damgalama gerekmez.
+           Senkron not birleşimi (id + ng + silinenNotlar mezarı) alanı olduğu
+           gibi taşır — ng/sayfa davranışı DEĞİŞMEDİ. */
+        ...(n.kayn === 'dosya' ? { kayn: 'dosya' } : {}),
         fikir: Array.isArray(n.fikir) ? n.fikir.map(f => String(f)).filter(Boolean) : [],
         /* tekrar*: aralıklı alıntı tekrarı (tekrar.js). Alıntılar varsayılan döngüde,
            notlar dışında (kartından "tekrara al" ile açılır). tekrarSonraki=null =
