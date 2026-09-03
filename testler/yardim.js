@@ -107,14 +107,15 @@ async function tehlikeAc(page) {
    { google: <GB yaniti|'hata'>, worker: <worker yaniti|'hata'>,
      olArama: <OL search yaniti|'hata'>, olKitap: <OL books yaniti|'hata'> }
      turler: <[{seo,ad,kitapSayisi}]|'hata'>,                      // v52 kesif uclari
-     tur: { <slug>: <{tur,sonuclar,hasMore}|'hata'> } }
+     tur: { <slug>: <{tur,sonuclar,hasMore}|'hata'> },
+     isbn: <{sonuclar:[...]}|'hata'> }                                 // v97 worker /isbn
    Tur ucu GERCEK worker gibi davranir: haritada olmayan slug 404 doner
    (kaynaktaki "200 + kitapTuru yok" imzasinin worker'daki karsiligi).
    Sayaclar page.__agSayac:
      { google, worker, turler, tur, olArama, olKitap, firebase, sonGoogleUrl, sonTurUrl } */
 async function agTaklit(page, ayar) {
   const sayac = { google: 0, worker: 0, turler: 0, tur: 0, olArama: 0, olKitap: 0,
-    firebase: 0, bildirim: 0, sonGoogleUrl: '', sonTurUrl: '' };
+    firebase: 0, bildirim: 0, isbn: 0, sonGoogleUrl: '', sonTurUrl: '', sonIsbnUrl: '' };
   const beklenmeyen = [];
   page.__agSayac = sayac;
   page.__agBeklenmeyen = beklenmeyen;
@@ -144,6 +145,14 @@ async function agTaklit(page, ayar) {
       if (!d) return route.fulfill({ status: 404, contentType: 'application/json',
         body: JSON.stringify({ hata: 'tur-bulunamadi' }) });
       return json(route, d);
+    }
+    /* v97: worker /isbn ucu AYRI dal + AYRI sayaç — genel `worker` sayacı ve
+       /ara taklidi (a.worker) mevcut vakaların anlamını korur. Varsayılan boş:
+       Google boş dönen eski vakalar yine 'bulunamadı' görür. */
+    if (url.includes('kitaplik-ara.dessn7.workers.dev/isbn?')) {
+      sayac.isbn++; sayac.sonIsbnUrl = url;
+      if (a.isbn === 'hata') return route.abort('failed');
+      return json(route, a.isbn || { sonuclar: [] });
     }
     if (url.includes('kitaplik-ara.dessn7.workers.dev')) {
       sayac.worker++;

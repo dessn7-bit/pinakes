@@ -279,6 +279,15 @@
     return s;
   }
 
+  /* v97: 1000Kitap yedeği — barkod.js'in workerIsbn'i (TEK uygulama, kopya yok).
+     Her arıza null: zenginleştirme döngüsünün "art arda hata" sayacı Google'ı
+     ölçer, worker arızası onu KİRLETMEZ; worker kapalıyken eski davranış sürer. */
+  async function workerIsbnSessiz(isbn){
+    try{
+      const B = window.__barkod;
+      return (B && typeof B.workerIsbn === 'function') ? await B.workerIsbn(isbn) : null;
+    }catch(e){ return null; }
+  }
   /* ---------- Google Books sorgusu (categories DAHİL — mevcut aramaGoogle
      categories okumadığı için burada kendi ayrıştırıcımız var) ---------- */
   async function gbSor(q, sinyal){
@@ -493,8 +502,29 @@
        sorgusu baskıya birebir olduğu için başlık doğrulamasına ihtiyaç duymaz.
        (Ölü kapaklı kitapların bir kısmında başlık eşleşmesi tutmuyor.) */
     const isbnKapak = kapakAdayBul(isbnAdaylar);
-    if(!aday) return isbnKapak ? (kapakOlu ? { kapak: isbnKapak, __kapakOlu: true }
-                                           : { kapak: isbnKapak }) : null;
+    if(!aday){
+      /* v97 — Google başlık eşleşmesi BOŞ ve kitabın ISBN'i varsa 1000Kitap
+         yedeği (worker /isbn; barkod.js ile aynı uç). Google'ın bulduğu aday
+         ASLA ezilmez: bu dala yalnız aday yokken girilir. Yalnız EKSİK alanlar
+         dolar; TÜR bu yoldan YAZILMAZ (taksonomi eşlemesi yok — uydurma yok).
+         ISBN sorgusu baskıya birebir → başlık doğrulaması istemez (v74 isbn:
+         kapak kararının aynısı; Türkçe adı farklı kayıtlarda başlık kıyası
+         yanlış RED üretirdi). Worker'a ulaşılamazsa sessiz: eski davranış
+         (isbn: kapağı ya da null). */
+      const wk = sIsbn ? await workerIsbnSessiz(sIsbn) : null;
+      const bulunanW = {};
+      if(wk){
+        if(eksikler.indexOf('isbn') >= 0 && wk.isbn) bulunanW.isbn = wk.isbn;
+        if(eksikler.indexOf('sayfa') >= 0 && wk.sayfa > 0) bulunanW.sayfa = wk.sayfa;
+        if(eksikler.indexOf('yayinevi') >= 0 && wk.yayinevi) bulunanW.yayinevi = String(wk.yayinevi);
+        if(eksikler.indexOf('yil') >= 0 && wk.yil > 1400 && wk.yil <= new Date().getFullYear() + 1) bulunanW.yil = wk.yil;
+      }
+      if(eksikler.indexOf('kapak') >= 0){
+        const kpk = isbnKapak || (wk && wk.kapak) || '';
+        if(kpk){ bulunanW.kapak = kpk; if(kapakOlu) bulunanW.__kapakOlu = true; }
+      }
+      return Object.keys(bulunanW).length ? bulunanW : null;
+    }
     const kimlik = aday.industryIdentifiers || [];
     const i13 = kimlik.find(x => x && x.type === 'ISBN_13');
     const i10 = kimlik.find(x => x && x.type === 'ISBN_10');

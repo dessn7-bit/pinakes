@@ -4,6 +4,8 @@
      GET /turler                 → { turler:[{seo,ad,kitapSayisi}] }                       (78 tür)
      GET /tur?slug=..&sayfa=1    → { tur:{seo,ad}, sonuclar:[{ad,yazar,puan,okuyan,kapak}], hasMore, sayfa }
      GET /saglik                 → kaynak başına canlı sayaç (asla cache'lenmez)
+     GET /isbn?q=<isbn>          → { sonuclar:[{ad,yazar,yayinevi,yil,sayfa,kapak,isbn,kaynak,cevirmen,dil}], kaynaklar }
+                                   Türkçe baskılar için 1000Kitap künyesi (v97); bulunamazsa boş dizi, asla fırlatmaz
      POST /ozet-taslak           → { durum:'tamam', metin, kaynak:'1000Kitap', dil:'tr' } |
                                    { durum:'bulunamadi' } | { durum:'hata', mesaj }  (v4)
    Kaynaklar: Goodreads auto_complete · 1000Kitap SSR (__NEXT_DATA__) · 1000Kitap v2 API
@@ -49,6 +51,9 @@ const TUR_ONBELLEK_SN = 12 * 3600;
    (proxy'nin keyfi adres çağırmasını da engeller). */
 const SLUG_KALIP = /^[A-Za-z0-9-]{1,60}$/;
 const SAGLIK_TUR = 'Felsefe-Dusunce';   // 4114 kitaplı, kalıcı tür — teşhis sabiti
+/* /isbn kenar önbelleği 24 saat: künye (yayınevi/sayfa/yıl) kararlı veri; boş
+   sonuç yine no-store (/ara kuralı — geçici arıza kendini uzatmasın). */
+const ISBN_ONBELLEK_SN = 86400;
 
 /* --- /ozet-taslak sabitleri (v4) --- */
 const TASLAK_GOVDE_SINIR = 4096;       // 4 KB üstü istek reddedilir
@@ -156,6 +161,38 @@ export default {
           sonuclar, hasMore: !!j.hasMore, sayfa
         };
       });
+    }
+
+    /* --- ISBN künyesi (v97): Türkçe baskılar için 1000Kitap zinciri ---
+       ÖLÇÜM (2026-09-03, Cloudflare kenarından, 6 gerçek ISBN + 1 yok-ISBN):
+       · Google Books Türkçe ISBN'de boş; Open Library seyrek ve yarım
+         ("1984 [TURKISH EDITION]", sayfa/yayınevi yok).
+       · 1000kitap.com/ara?q=<ISBN13>&bolum=kitaplar SSR listesi ISBN'i tanıyor ve
+         BASKININ KENDİ id'sini veriyor (1984'ün İş Bankası/İlya/Anonim baskıları
+         ayrı id'lerle geldi). ISBN-10 ile 0 sonuç → önce 13 haneye çevrilir.
+       · api.1000kitap.com/v2/kitaplar/kitapCek?id= → liste[renderTuru=kitapHakkinda]
+         .hakkinda.baskiBilgileri {adi, yayinevi, isbn, sayfaSayisi, baskiYili, dil}
+         + digerBaskilar[].baskiBilgileriArray; 6/6'da ISBN ana baskıda eşleşti.
+         kitap.yazarlar[] rol etiketli (Yazar / Çevirmen / Editör). Süre <1 sn.
+       · Kitapyurdu site araması ISBN'i BULMUYOR (13 haneli, tireli, 10 haneli;
+         yerel + kenar): "Aradım Bulamadım" → kaynak listesine ALINMADI.
+       · 1000Kitap kitap sayfası JSON-LD'sinde yayınevi/sayfa YOK; API zengin.
+       SÖZLEŞME: çıktı /ara ile AYNI alan seti + isbn (+ cevirmen, dil). Bulunamazsa
+       boş dizi, ASLA fırlatmaz. Aranan ISBN'le birebir eşleşmeyen baskı YAZILMAZ
+       (arama gevşek dönerse yanlış kitap sessizce rafa girmesin). */
+    if (url.pathname === '/isbn') {
+      const isbn = isbn13e(url.searchParams.get('q') || '');
+      if (!isbn) return json({ sonuclar: [], kaynaklar: { binkitap: 0, isbnEslesme: 0 } },
+        { ...cors, 'Cache-Control': 'no-store' });
+      const anahtar = new Request(url.origin + '/isbn?q=' + isbn);   // kanonik: 10 hane de aynı kovaya
+      const cache = caches.default;
+      const vurus = await cache.match(anahtar);
+      if (vurus) return vurus;
+      const { sonuclar, kaynaklar } = await isbnKunye(isbn);
+      if (!sonuclar.length) return json({ sonuclar, kaynaklar }, { ...cors, 'Cache-Control': 'no-store' });
+      const yanit = json({ sonuclar, kaynaklar }, { ...cors, 'Cache-Control': 'public, max-age=' + ISBN_ONBELLEK_SN });
+      ctx.waitUntil(cache.put(anahtar, yanit.clone()));
+      return yanit;
     }
 
     if (url.pathname !== '/ara')
@@ -289,6 +326,70 @@ function listeBul(o) {
     for (const v of Object.values(o)) { const r = listeBul(v); if (r) return r; }
   }
   return null;
+}
+
+/* --- ISBN yardımcıları (v97) --- */
+/* Temizle + sağlama + 10 haneyi 13'e çevir. Geçersiz sağlama → '' (kaynağa gitmez). */
+function isbn13e(s) {
+  const t = String(s || '').replace(/[^0-9Xx]/g, '').toUpperCase();
+  if (/^\d{13}$/.test(t)) {
+    let top = 0; for (let i = 0; i < 12; i++) top += (+t[i]) * (i % 2 ? 3 : 1);
+    return ((10 - top % 10) % 10) === +t[12] ? t : '';
+  }
+  if (/^\d{9}[\dX]$/.test(t)) {
+    let top = 0; for (let i = 0; i < 10; i++) top += (t[i] === 'X' ? 10 : +t[i]) * (10 - i);
+    if (top % 11 !== 0) return '';
+    const g = '978' + t.slice(0, 9);
+    let top13 = 0; for (let i = 0; i < 12; i++) top13 += (+g[i]) * (i % 2 ? 3 : 1);
+    return g + ((10 - top13 % 10) % 10);
+  }
+  return '';
+}
+/* Zincir: SSR arama (ISBN → baskı id) → kitapCek → ISBN'i eşleşen baskı. Her
+   arıza boş sonuç; kaynaklar sayacı teşhis için (binkitap = arama adayı sayısı,
+   isbnEslesme = künye ISBN'le doğrulandı mı). */
+async function isbnKunye(isbn) {
+  let liste = [];
+  try { liste = await bkHamListe(isbn); } catch (e) { liste = []; }
+  const kaynaklar = { binkitap: liste.length, isbnEslesme: 0 };
+  const ilk = liste[0];
+  if (!ilk || !ilk.id) return { sonuclar: [], kaynaklar };
+  let j = null;
+  try { j = await binKitapApi('kitaplar/kitapCek?id=' + encodeURIComponent(ilk.id)); } catch (e) { j = null; }
+  const kayit = j ? isbnDonustur(j, isbn) : null;
+  if (!kayit) return { sonuclar: [], kaynaklar };
+  kaynaklar.isbnEslesme = 1;
+  return { sonuclar: [kayit], kaynaklar };
+}
+/* SAF dönüştürücü (test kancası): kitapCek JSON'u + aranan ISBN13 → /ara alan seti.
+   Baskı adayları: hakkinda.baskiBilgileri (ana) + digerBaskilar[].baskiBilgileriArray;
+   ISBN'i aranan ile birebir eşleşen baskı seçilir, eşleşen yoksa null. */
+function isbnDonustur(j, isbn) {
+  const hk = (((j && j.liste) || []).find(x => x && x.renderTuru === 'kitapHakkinda') || {}).hakkinda || {};
+  const adaylar = [];
+  if (hk.baskiBilgileri) adaylar.push(hk.baskiBilgileri);
+  for (const d of (hk.digerBaskilar || [])) if (d && d.baskiBilgileriArray) adaylar.push(d.baskiBilgileriArray);
+  const b = adaylar.find(x => x && isbn13e(x.isbn) === isbn);
+  if (!b) return null;
+  const k = (j && j.kitap) || {};
+  const rol = ad => (Array.isArray(k.yazarlar) ? k.yazarlar : [])
+    .filter(y => y && y.adi && String(y.kitapYazarTurBaslik || '') === ad).map(y => String(y.adi).trim());
+  const yazarlar = rol('Yazar');
+  const ad = String(b.adi || k.adi || '').trim();
+  if (!ad) return null;
+  const yil = parseInt(b.baskiYili, 10), sayfa = parseInt(b.sayfaSayisi, 10);
+  return {
+    ad,
+    yazar: (yazarlar.length ? yazarlar : [String(k.ilkYazar || '').trim()]).filter(Boolean).slice(0, 2).join(', '),
+    yayinevi: String(b.yayinevi || '').trim(),
+    yil: yil > 0 ? yil : null,
+    sayfa: sayfa > 0 ? sayfa : null,
+    kapak: k.resim || null,
+    isbn,
+    kaynak: '1000Kitap',
+    cevirmen: rol('Çevirmen').slice(0, 2).join(', '),
+    dil: (b.dil && b.dil.kod) ? String(b.dil.kod).toLowerCase() : ''
+  };
 }
 
 /* --- Kaynak 3: 1000Kitap v2 API (tür keşfi) --- */
@@ -499,4 +600,4 @@ function dilTahmin(m) { return /[çğışöüÇĞİŞÖÜ]/.test(m) ? 'tr' : 'en
 
 /* test kancası (node testleri için, Worker çalışmasını etkilemez) */
 export { grDonustur, bkDonustur, tekillestir, norm, adUyar, yazarUyar,
-  taslakDogrula, metinTemizle, dilTahmin };
+  taslakDogrula, metinTemizle, dilTahmin, isbn13e, isbnDonustur };

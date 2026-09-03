@@ -237,6 +237,7 @@
       ad: k.ad, yazar: k.yazar || '', yayinevi: k.yayinevi || '',
       yil: k.yil || null, sayfa: k.sayfa || null, tur: k.tur || '',
       durum: durumSec, kapak: k.kapak || null,
+      cevirmen: k.cevirmen || '', dil: k.dil || '',   // v97: 1000Kitap künyesinden (kitapNormalize alanları)
       guncelSayfa: durumSec === 'bitti' && k.sayfa ? k.sayfa : 0,
       bitisTarihi: durumSec === 'bitti' && typeof bugun === 'function' ? bugun() : null
     });

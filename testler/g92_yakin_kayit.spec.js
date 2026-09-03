@@ -159,6 +159,9 @@ test.describe('G92 seri taramada yakın kayıt uyarısı (v96)', () => {
     const dal = kaynak.slice(kaynak.indexOf('if(yakin){'), j);
     expect(dal).not.toMatch(/\breturn\b/);
     const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
-    expect(sw).toContain("const CACHE = ONEK + '-v96'");
+    /* v97 düzeltmesi (g91 deseni): sürüm KAYNAKTAN okunur — sabit '-v96' anahtarı
+       ilk sürüm artışında kırıldı; niyet 'bu sprintte sw bump yapıldı' (≥96). */
+    const swN = Number((sw.match(/const CACHE = ONEK \+ '-v(\d+)'/) || [])[1]);
+    expect(swN).toBeGreaterThanOrEqual(96);
   });
 });

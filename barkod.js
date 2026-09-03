@@ -66,6 +66,7 @@
         };
       }
     }catch(e){ gbHata = true; }
+    const gbBulundu = !!(sonuc && sonuc.ad);   // v97: Google'ın sonucu ASLA ezilmez
     // Open Library: eksik alanları tamamlar (özellikle yayınevi)
     try{
       const r = await fetch('https://openlibrary.org/api/books?format=json&jscmd=data&bibkeys=ISBN:' + encodeURIComponent(t));
@@ -85,7 +86,55 @@
           if(!sonuc[k] && ol[k]) sonuc[k] = ol[k];
       }
     }catch(e){ olHata = true; }
+    /* v97 — 1000Kitap yedeği (worker /isbn): YALNIZ Google boş ya da arızalı
+       dönerse (gbBulundu → bu dala hiç girilmez; Google sonucu ezilmez).
+       ÖLÇÜM: Google Books Türkçe ISBN'de boş, Open Library seyrek ve yarım
+       ("1984 [TURKISH EDITION]", sayfa/yayınevi yok); 1000Kitap künyesi baskıya
+       birebir (yayınevi/sayfa/yıl/çevirmen). OL yarım kayıt vermişse künye ÖNE
+       alınır, OL boşlukları doldurur. Worker'a ulaşılamazsa SESSİZ: eski
+       Google/OL davranışı aynen sürer. Worker AĞ TEŞHİSİNE GİRMEZ: agSorunu
+       sözleşmesi (g13 M3) "Google + OL ikisi de yanıt veremedi" olarak kalır —
+       worker yalnız veri ekler; o da bulursa zaten sonuç var, arıza raporu yok. */
+    if(!gbBulundu){
+      try{
+        const wk = await workerIsbn(t);
+        if(wk){
+          const ol = sonuc; sonuc = wk;
+          if(ol) for(const k of ['yazar','yayinevi','yil','sayfa','kapak'])
+            if(!sonuc[k] && ol[k]) sonuc[k] = ol[k];
+        }
+      }catch(e){ /* worker kapalı/zaman aşımı — sessiz, Google/OL sonucu neyse o */ }
+    }
+    if(sonuc && !sonuc.kaynak) sonuc.kaynak = gbBulundu ? 'Google Books' : 'Open Library';
     return { sonuc, agSorunu: gbHata && olHata };
+  }
+  /* v97: worker /isbn — Türkçe baskılar için 1000Kitap künyesi. 6 sn zaman
+     aşımı; HTTP/ağ arızası fırlatılır (çağıran sessizce yutar), kaynakta yoksa
+     null. Alan seti barkod sonucuyla aynı (+ cevirmen/dil: 1000Kitap rol
+     etiketli veriyor, kitapNormalize alanları var — uydurma değil). */
+  async function workerIsbn(isbn){
+    const kok = (typeof ARA_KOK === 'string' && ARA_KOK) ? ARA_KOK : 'https://kitaplik-ara.dessn7.workers.dev';
+    const c = (typeof AbortController === 'function') ? new AbortController() : null;
+    const z = c ? setTimeout(() => c.abort(), 6000) : null;
+    try{
+      const r = await fetch(kok + '/isbn?q=' + encodeURIComponent(isbn), c ? { signal: c.signal } : undefined);
+      if(!r.ok) throw new Error('http ' + r.status);
+      const j = await r.json();
+      const s = j && Array.isArray(j.sonuclar) ? j.sonuclar[0] : null;
+      if(!s || !s.ad) return null;
+      return {
+        ad: s.ad, yazar: s.yazar || '', yayinevi: s.yayinevi || '',
+        yil: s.yil || null, sayfa: s.sayfa || null, kapak: s.kapak || null,
+        tur: '', kategoriler: [],
+        cevirmen: s.cevirmen || '', dil: s.dil || '',
+        kaynak: s.kaynak || '1000Kitap'
+      };
+    }finally{ if(z) clearTimeout(z); }
+  }
+  /* v97: "Barkod okundu" bildirimi kaynağı söyler — "1000Kitap'tan okundu: İon". */
+  const KAYNAK_EK = { '1000Kitap': "1000Kitap'tan", 'Google Books': "Google Books'tan", 'Open Library': "Open Library'den" };
+  function kaynakOkundu(kaynak, kaynakMetni){
+    return (kaynak && KAYNAK_EK[kaynak]) ? KAYNAK_EK[kaynak] + ' okundu' : (kaynakMetni || 'Barkod') + ' okundu';
   }
 
   /* ---------- formu doldur ---------- */
@@ -94,6 +143,7 @@
     yaz('f-ad', k.ad); yaz('f-yazar', k.yazar); yaz('f-yayinevi', k.yayinevi);
     yaz('f-yil', k.yil); yaz('f-sayfa', k.sayfa);
     yaz('f-isbn', isbn);   // okunan ISBN kayda geçsin (kopya tespitinin en sağlam anahtarı)
+    yaz('f-cevirmen', k.cevirmen); yaz('f-dil', k.dil);   // v97: 1000Kitap rol etiketli verir; yoksa dokunmaz
     const tur = document.getElementById('f-tur');
     if(tur && !tur.value && k.tur) tur.value = k.tur;
     /* Otomatik tür (v65): ISBN yanıtındaki kategoriler kayıt anındaki tür
@@ -132,7 +182,7 @@
       return false;
     }
     formuDoldur(k, t);
-    bildir((kaynakMetni || 'Barkod') + ' okundu: ' + k.ad);
+    bildir(kaynakOkundu(k.kaynak, kaynakMetni) + ': ' + k.ad);
     return true;
   }
 
@@ -351,7 +401,7 @@
   if(document.getElementById('araTipSec')) baslat();
   else document.addEventListener('DOMContentLoaded', baslat);
 
-  window.__barkod = { isbnGecerli, isbnTemizle, isbnAra, isbnIsle, formuDoldur, kameraVar,
+  window.__barkod = { workerIsbn, isbnGecerli, isbnTemizle, isbnAra, isbnIsle, formuDoldur, kameraVar,
     /* tarama motoru — katalog.js seri taraması da bunları kullanır (aynı 'isbn'
        enum kusuru oradaydı); testler yedekKareCoz'a sahte EAN-13 tuvali verir */
     tarayiciKur, yedekYukle, yedekKareCoz, yedekVideoCoz, kameraKisitlari, odaklan, kameraHataAdi };
