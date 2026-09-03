@@ -1034,6 +1034,37 @@
          iki-sayılı kurulur (özet + ontoloji ayrı söylenir) */
     }
   };
+  /* v98: NOT DOSYASI — dördüncü içe aktarım tipi. Özet borusuyla AYNI KALIP
+     (dosya seçici → ad+yazar katla eşleme → önizleme → onay → yazım) ama
+     planlayıcısı AYRI (iceNotOku/iceNotOnizleCiz/iceNotUygula): boru kitap
+     başına TEK değer şemalı (dolacak/değişecek; dosyada çift kayıt → ilk
+     kazanır), not dosyası ise kitap başına ÇOK satır taşır ve mevcut notlara
+     asla dokunmaz — yalnız EKLER. iceOku/iceOnizleCiz'e dal eklemek yerine
+     kopya yol: ozetDosyaKur kararının aynısı (tur/adTr/özet yolları g56/g59/
+     g79 ile kilitli, sıfır risk). Tekil icePlan + iceUygula/iceVazgec ORTAK:
+     başka akışın açık önizlemesi kapanır, paylaşılan düğme yanlış plana yazamaz.
+     KURALLAR: tip yalnız 'not' | 'alinti' (katla ile; başkası → atlanır, sayılır)
+     · ad/metin boş → eksik alanlı · eşleşmeyen satır yazılmaz, listelenir ·
+     aynı kitapta aynı metin (katla) zaten varsa → "zaten vardı" (dosya içi
+     tekrar dahil) · kayıt şeması mevcut notla BİREBİR (detay not-ekle yolu):
+     {id: uid(), tip, metin, tarih: bugun(), sayfa: null, ng: Date.now()} —
+     ng senkron not birleşiminin damgası; k.g kullanıcı-eylemi damgası
+     (iceYazHam ile aynı). Senkron/JSON yedeği kitabın notlar dizisini nasıl
+     taşıyorsa öyle taşır; hatırlatma/tekrar için istisna YOK. */
+  const ICE_NOT = {
+    anahtar: 'notlar', kaynakAnahtar: 'not',
+    ortuId: 'zgNotIceOrtu', ortuBaslik: 'Not dosyası yükle',
+    sonTazele(){ durumTazele(); },
+    act: { uygula: 'zg-not-uygula', vazgec: 'zg-not-vazgec' },
+    metin: {
+      bicimYok: 'Bu dosyada not listesi yok — beklenen biçim: { "surum": 1, "not": [ {ad, yazar, metin, tip} ] }',
+      yalnizNot: 'Yalnız EKLEME yapılır: var olan notların ve alıntıların hiçbirine dokunulmaz, silinmez, ' +
+        'değiştirilmez. Onaylamadan hiçbir şey yazılmaz.',
+      yazDugme: n => 'Notları ekle (' + n + ')',
+      toastYazildi: (n, kitap) => n + ' not dosyadan eklendi (' + kitap + ' kitap)'
+    }
+  };
+  const NOT_TIPLERI = { not: 'not', alinti: 'alinti' };
   let icePlan = null;   // tekil: uygula/vazgec daima SON okunan plana işler
   /* v80 kancalar: varsayılanlar eski davranışla BİREBİR (tur/adTr değişmez) */
   function iceDegerOku(cfg, k){
@@ -1186,6 +1217,7 @@
     /* v80: özet planı AYRI async dala — tur/adTr yolu aşağıda BİREBİR eski
        senkron gövde (g56 toast zamanlaması değişmesin) */
     if(plan.cfg === ICE_OZET){ iceUygulaOzet(plan); return; }
+    if(plan.cfg === ICE_NOT){ iceNotUygula(plan); return; }   // v98: not planı AYRI dal
     const cfg = plan.cfg;
     const deneme = cfg.denemeDamgala ? defterOku(OTO_DENEME_ANAHTAR) : null;
     let n = 0;
@@ -1308,6 +1340,124 @@
       g.addEventListener('change', e => {
         const f = e.target.files && e.target.files[0];
         if(f) iceOku(ICE_OZET, f);
+        e.target.value = '';   // aynı dosya ikinci kez seçilebilsin
+      });
+    }
+    return g;
+  }
+
+  /* ---------- NOT DOSYASI içe aktarımı (v98) ---------- */
+  async function iceNotOku(dosya){
+    const cfg = ICE_NOT;
+    let govde;
+    try{ govde = JSON.parse(await dosya.text()); }
+    catch(e){ bildir('Dosya okunamadı — geçerli bir JSON değil'); return; }
+    const kayitlar = govde && Array.isArray(govde[cfg.kaynakAnahtar]) ? govde[cfg.kaynakAnahtar] : null;
+    if(!kayitlar || !kayitlar.length){ bildir(cfg.metin.bicimYok); return; }
+    /* eşleme haritası özet borusuyla BİREBİR: katla(ad)|katla(yazar) */
+    const harita = {};
+    (veri.kitaplar || []).forEach(k => {
+      const anah = katla(k.ad) + '|' + katla(k.yazar || '');
+      (harita[anah] = harita[anah] || []).push(k);
+    });
+    const plan = { cfg, eklenecek: [], zatenVardi: 0, tipBozuk: 0, gecersiz: 0, eslesmeyen: [] };
+    const gorulen = {};   // kitap id → Set(katla(metin)): mevcut notlar + bu dosyada planlananlar
+    const metinSeti = k => {
+      if(!gorulen[k.id]) gorulen[k.id] = new Set((k.notlar || []).map(n => katla(n && n.metin)));
+      return gorulen[k.id];
+    };
+    for(const r of kayitlar){
+      const metin = r ? String(r.metin == null ? '' : r.metin).trim() : '';
+      if(!r || !String(r.ad || '').trim() || !metin){ plan.gecersiz++; continue; }
+      const tip = NOT_TIPLERI[katla(r.tip)];
+      if(!tip){ plan.tipBozuk++; continue; }
+      const kitaplar = harita[katla(r.ad) + '|' + katla(r.yazar || '')];
+      if(!kitaplar){ plan.eslesmeyen.push(r); continue; }
+      for(const k of kitaplar){
+        const set = metinSeti(k), anah = katla(metin);
+        if(set.has(anah)){ plan.zatenVardi++; continue; }
+        set.add(anah);
+        plan.eklenecek.push({ id: k.id, ad: k.ad, tip, metin });
+      }
+    }
+    if(icePlan && icePlan.cfg !== cfg) kapat(icePlan.cfg.ortuId);
+    icePlan = plan;
+    ortuKur(cfg.ortuId, cfg.ortuBaslik);
+    iceNotOnizleCiz();
+    ac(cfg.ortuId);
+  }
+  function iceNotOnizleCiz(){
+    const plan = icePlan;
+    if(!plan || plan.cfg !== ICE_NOT) return;
+    const cfg = plan.cfg;
+    const g = document.getElementById(cfg.ortuId + 'Govde');
+    if(!g) return;
+    const kitapSayisi = new Set(plan.eklenecek.map(y => y.id)).size;
+    const ozet = [];
+    if(plan.eklenecek.length) ozet.push('<b>' + plan.eklenecek.length + '</b> not eklenecek (' + kitapSayisi + ' kitap)');
+    if(plan.zatenVardi) ozet.push(plan.zatenVardi + ' satır zaten vardı');
+    if(plan.eslesmeyen.length) ozet.push(plan.eslesmeyen.length + ' satır eşleşmedi');
+    if(plan.tipBozuk) ozet.push(plan.tipBozuk + ' satır tip alanı bozuk (atlanacak)');
+    if(plan.gecersiz) ozet.push(plan.gecersiz + ' satır eksik alanlı (atlanacak)');
+    const katla_ = (baslik, satirlar) => satirlar.length
+      ? '<details class="zg-katla"><summary>' + baslik + ' (' + satirlar.length + ')</summary>' +
+        '<div class="zg-onizle-liste">' + satirlar.join('') + '</div></details>'
+      : '';
+    const kirp = s => { s = String(s == null ? '' : s); return s.length > 60 ? s.slice(0, 60) + '…' : s; };
+    g.innerHTML =
+      '<div class="zg-ozet">' + (ozet.join(' · ') || 'Dosyada işlenecek kayıt yok.') + '</div>' +
+      '<p class="zg-not">' + cfg.metin.yalnizNot + '</p>' +
+      katla_('Eklenecek notlar', plan.eklenecek.map(y =>
+        '<div class="zg-onizle-satir"><div class="zg-onizle-ic">' +
+        '<span class="zg-onizle-ad">' + esc(y.ad) + '</span>' +
+        '<span class="zg-onizle-alan">' + (y.tip === 'alinti' ? 'alıntı' : 'not') + ': ' + esc(kirp(y.metin)) + '</span></div></div>')) +
+      katla_('Eşleşmeyen satırlar', plan.eslesmeyen.map(r =>
+        '<div class="zg-onizle-satir"><div class="zg-onizle-ic">' +
+        '<span class="zg-onizle-ad">' + esc(r.ad) + '</span>' +
+        '<span class="zg-onizle-alan">' + esc(r.yazar || '') + '</span></div></div>')) +
+      '<div class="form-alt">' +
+        '<button class="btn btn-cerceve" data-act="' + cfg.act.vazgec + '" style="flex:1">Vazgeç</button>' +
+        (plan.eklenecek.length
+          ? '<button class="btn btn-cerceve" data-act="' + cfg.act.uygula + '" style="flex:2">' +
+            cfg.metin.yazDugme(plan.eklenecek.length) + '</button>'
+          : '') +
+      '</div>';
+  }
+  /* Yazım: YALNIZ push. Mevcut not/alıntı dizisine dokunulmaz; kayıt şeması
+     detay not-ekle yolunun aynısı (ng damgası dahil), k.g kullanıcı eylemi. */
+  function iceNotUygula(plan){
+    const cfg = plan.cfg;
+    icePlan = null;
+    let n = 0;
+    const kitaplar = new Set();
+    for(const y of plan.eklenecek){
+      const k = (veri.kitaplar || []).find(x => x.id === y.id);
+      if(!k) continue;
+      k.notlar = k.notlar || [];
+      k.notlar.push({ id: uid(), tip: y.tip, metin: y.metin, tarih: bugun(), sayfa: null, ng: Date.now() });
+      k.g = Date.now();
+      kitaplar.add(k.id); n++;
+    }
+    if(typeof depoKaydet === 'function') depoKaydet();
+    kapat(cfg.ortuId);
+    bildir(cfg.metin.toastYazildi(n, kitaplar.size));
+    if(typeof hepsiniCiz === 'function') hepsiniCiz();
+    cfg.sonTazele();
+  }
+  /* not dosya seçici — ozetDosyaKur'un aynı-kalıp kopyası (zgNotDosya) */
+  function notDosyaKur(){
+    let g = document.getElementById('zgNotDosya');
+    if(!g){
+      g = document.createElement('input');
+      g.type = 'file'; g.id = 'zgNotDosya';
+      g.accept = '.json,application/json'; g.hidden = true;
+      document.body.appendChild(g);
+    }
+    if(!g.__zgBagli){   // dinleyici BİR kez bağlanır — her tıklamada çoğalmasın
+      g.__zgBagli = true;
+      g.addEventListener('change', e => {
+        const f = e.target.files && e.target.files[0];
+        if(f) iceNotOku(f);
         e.target.value = '';   // aynı dosya ikinci kez seçilebilsin
       });
     }
@@ -1921,6 +2071,10 @@
         case 'zg-ozet-ice': ozetDosyaKur(); document.getElementById('zgOzetDosya').click(); break;
         case 'zg-ozet-uygula': iceUygula(); break;   // iceUygula özet planında async dalı seçer
         case 'zg-ozet-vazgec': iceVazgec(); break;
+        // v98: not dosyası — düğme HTML'i index.html'de (data-act="zg-not-ice")
+        case 'zg-not-ice': notDosyaKur(); document.getElementById('zgNotDosya').click(); break;
+        case 'zg-not-uygula': iceUygula(); break;   // iceUygula not planında iceNotUygula dalını seçer
+        case 'zg-not-vazgec': iceVazgec(); break;
         case 'zg-oto-liste':
           ortuKur('zgOtoOrtu', 'Otomatik atanan türler');
           otoListeCiz(); ac('zgOtoOrtu');

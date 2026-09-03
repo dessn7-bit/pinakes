@@ -1254,6 +1254,16 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
         <div class="ay-eylem">
           <button class="btn btn-cerceve" data-act="zg-ozet-ice">Özet dosyası seç</button>
         </div>
+        <!-- Not dosyası (v98) — özet kalıbının eşi; planlayıcısı zengin.js'te AYRI
+             (kitap başına çok satır, yalnız EKLEME). Önizleme + onay aynen. -->
+        <h3 class="ay-baslik">Not dosyası</h3>
+        <p class="ay-not">Dışarıda hazırlanan not ve alıntı dosyasını toplu yükler. Kayıtlar ad + yazar ile
+      eşlenir; yalnızca ekleme yapar, var olan notlarına dokunmaz. Beklenen biçim:
+      <b>{ "surum": 1, "not": [ {ad, yazar, metin, tip} ] }</b> — tip yalnız "not" ya da "alinti"; başka
+      değer taşıyan satır atlanır, önizlemede sayısı görünür. Aynı kitapta aynı metin varsa yeniden eklenmez.</p>
+        <div class="ay-eylem">
+          <button class="btn btn-cerceve" data-act="zg-not-ice">Not dosyası seç</button>
+        </div>
       </section>
 
       <!-- ZENGİNLEŞTİR (zg-) — mantık zengin.js'te. Eksik alan sayımı + toplu
