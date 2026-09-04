@@ -2333,6 +2333,31 @@ function mdMini(ham){
     .map(p => p.trim()).filter(Boolean)
     .map(p => '<p>' + vurgu(p) + '</p>').join('');
 }
+/* ---------- mdDuz (v103) — mdMini'nin TERSİ ----------
+   BAZI YÜZEYLER HTML İŞLEYEMEZ: push bildiriminin gövdesi düz metindir. Orada
+   çözüm render etmek DEĞİL, işaretleri SİLMEKTİR — yoksa okur bildirimde
+   yıldızlı metin görür. Ölçüm: 243 özet kaydının 185'inde **kalın** var, yani
+   nadir bir durum değil.
+   SÖZLEŞME (mdMini ile simetrik):
+     **kalın** → kalın      · *italik* → italik      (İŞARET gider, METİN kalır)
+     kapanmamış / tek başına yıldız de silinir — bildirimde yalnız yıldız
+     kalmasın (Kaan md.3). `__` de temizlenir: mdMini onu render ETMEZ, yani
+     düz metinde ham görünürdü (bu davranış v88'den beri parcala'daydı).
+   NEDEN AYNI DOSYADA: bu iki işlev tek bir markdown sözleşmesinin iki yüzü.
+   Ayrı dosyalarda dursalar biri değişince öteki sessizce sapardı — v101'de
+   mdMini yazılırken bildirim yolundaki bu kural gözden kaçmıştı (Kaan kuralı:
+   ikisi yan yana dursun ki biri değişirse öteki de görülsün).
+   BOŞLUK: yalnız işaret silmenin AÇTIĞI fazla boşluk kapatılır; satır sonları
+   KORUNUR (çağıran paragraf yapısını kendi kararına göre işler). */
+function mdDuz(ham){
+  return String(ham ?? '')
+    .replace(/\*\*([\s\S]*?)\*\*/g, '$1')   // kalın işareti: metin kalır
+    .replace(/\*([^\n]*?)\*/g, '$1')        // italik işareti: metin kalır
+    .replace(/\*+/g, '')                    // kapanmamış ya da tek başına yıldız
+    .replace(/__/g, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
 /* ---------- Tür GÖRÜNEN adı (v91) ----------
    k.tur değeri 1000Kitap taksonomisinin KENDİ adıdır ve öyle kalır: otomatik
    tür motoru, içe aktarım taksonomi kapısı, Keşfet tür rafı ve yerleşik liste

@@ -7,7 +7,7 @@
    (eski sözleşme; gerçek SW'de location.pathname her zaman var). */
 const SW_YOL = String((self.location && self.location.pathname) || '');
 const ONEK = SW_YOL.indexOf('/pinakes/') === 0 ? 'pinakes' : 'kitaplik';
-const CACHE = ONEK + '-v102';
+const CACHE = ONEK + '-v103';
 // OCR paketi kovası (ocr.js yönetir): ~6 MB'lik tesseract paketi kullanıcı
 // ONAYIYLA bir kez iner, buraya alınır. ASSETS'e BİLEREK girmez — ilk PWA
 // kurulumunda 6 MB indirtmek yanlış olurdu. ocr.js dosyasının kendisi (küçük

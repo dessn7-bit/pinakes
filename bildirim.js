@@ -362,7 +362,12 @@
     const ham = String(metin || '').split(/\n\s*\n/);
     const cikti = [];
     ham.forEach((p, i) => {
-      const t = p.replace(/\*\*|__|\*/g, '').replace(/\s+/g, ' ').trim();
+      /* v103: markdown işaretleri TEK yerden siliniyor — index.html'deki
+         mdDuz (mdMini'nin tersi). Buradaki satır içi kopya v88'den beri ayrı
+         yaşıyordu; mdMini v101'de yazılırken bu kural gözden kaçmıştı.
+         Yüklenmemişse eski davranış (aynı sonuç) yedek kalır. */
+      const duz = (typeof mdDuz === 'function') ? mdDuz(p) : p.replace(/\*\*|__|\*/g, '');
+      const t = duz.replace(/\s+/g, ' ').trim();
       if(t.length < PARCA_MIN || t.length > PARCA_MAX) return;   // kısa/uzun
       if(/:\s*$/.test(t)) return;                                 // "BAĞLAM:" gibi başlık
       const harfler = t.match(/\p{L}/gu) || [];

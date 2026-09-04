@@ -158,3 +158,91 @@ test.describe('G96 mini markdown (v101)', () => {
     expect(html).toContain('.ts-govde{white-space:pre-wrap}');
   });
 });
+
+/* ---------------------------------------------------------------------------
+   G96b — mdDuz (v103): mdMini'nin TERSİ, düz metin yüzeyleri için.
+
+   NEDEN: push bildiriminin gövdesi DÜZ METİNDİR, HTML işleyemez. Orada çözüm
+   render etmek değil işaretleri SİLMEKTİR. Ölçüm: 243 özet kaydının 185'inde
+   **kalın** var — nadir değil.
+   SÖZLEŞME: **kalın** ve *italik* işaretleri silinir, METİN KALIR; kapanmamış
+   ya da tek başına yıldız da silinir (bildirimde yalnız yıldız kalmasın);
+   metin başka hiçbir şekilde değişmez.
+   YERLEŞİM KURALI (Kaan): mdMini ile mdDuz AYNI DOSYADA durur — biri değişirse
+   öteki de görülsün. Bu dosya o kuralı kilitliyor.
+   (Mutasyon: mdDuz'daki `\*+` temizliğini kaldır → C kırmızı; parcala'yı eski
+    satır içi kopyasına döndür → D yeşil kalır ama E kırmızı.) */
+test.describe('G96b mdDuz — düz metin yüzeyleri (v103)', () => {
+
+  const duz = (page, s) => page.evaluate(x => mdDuz(x), s);
+
+  test('A) işaret gider, metin KALIR', async ({ page }) => {
+    await kur(page, 'x');
+    expect(await duz(page, '**Bukalemun** öyküsü')).toBe('Bukalemun öyküsü');
+    expect(await duz(page, '**Köpekli Kadın**, **6 Numaralı Koğuş**.'))
+      .toBe('Köpekli Kadın, 6 Numaralı Koğuş.');
+    expect(await duz(page, '*Percy Jackson ve Bronz Ejderha* — öykü'))
+      .toBe('Percy Jackson ve Bronz Ejderha — öykü');
+    expect(await duz(page, 'yıldızsız düz metin')).toBe('yıldızsız düz metin');
+  });
+
+  test('B) gerçek kayıt: harf/rakam kaybı YOK, yalnız işaretler düşer', async ({ page }) => {
+    await kur(page, 'x');
+    const kaynak = "Gogol öyküleri **1829–1832** arasında yazdı; birinci cilt **1831**'de, "
+      + "ikinci cilt **1832**'de çıktı. Yazar o sırada **yirmi iki yaşındaydı**.";
+    const c = await duz(page, kaynak);
+    expect(c).not.toContain('*');
+    const harf = t => (t.match(/\p{L}|\p{N}/gu) || []).length;
+    expect(harf(c), 'harf/rakam sayısı korunmalı').toBe(harf(kaynak));
+    expect(c).toContain('1829–1832');
+  });
+
+  test('C) kapanmamış ve tek başına yıldız da temizlenir (md.3)', async ({ page }) => {
+    await kur(page, 'x');
+    expect(await duz(page, 'kapanmayan **yıldız burada')).toBe('kapanmayan yıldız burada');
+    expect(await duz(page, 'tek * yıldız')).toBe('tek yıldız');
+    expect(await duz(page, '***üçlü***')).toBe('üçlü');
+    expect(await duz(page, '__alt çizgi__')).toBe('alt çizgi');
+  });
+
+  test('D) BİLDİRİM GÖVDESİ: kalın yoğun kayıttan üretilen parçada yıldız YOK', async ({ page }) => {
+    /* Kaan'ın istediği kontrol: Çehov seçkisi deseni — öykü adları kalın. */
+    const P1 = 'Yaygın olarak yer alan başlıklar şunlardır: **Köpekli Kadın**, '
+      + '**6 Numaralı Koğuş**, **Bir Sıkıcı Hikâye**, **Öğrenci** ve **Sevgili Kadın**.';
+    const P2 = "Ömer Seyfettin'in en tanınan hikâyesidir ve Türkiye'de kuşaklar boyunca "
+      + '**ders kitaplarında** okutulmuştur; çocukluk okuma belleğinde bir yeri vardır.';
+    await tohumla(page, [sahteKitap({ id: 'bd1', ad: 'Çehov Seçme Öyküler', durum: 'bitti' })]);
+    await rafAc(page);
+    await page.evaluate(async ([a, b]) => {
+      await window.__ozet.hazirBekle();
+      await window.__ozet.kaydet('bd1', a + '\n\n' + b);
+    }, [P1, P2]);
+    const o = await page.evaluate(() => window.__bildirim.parcaOzeti());
+    expect(o && o.havuz.length, 'parça havuzu dolmalı').toBeGreaterThan(0);
+    for (const p of o.havuz) {
+      expect(p.metin, 'bildirim gövdesinde yıldız kalmamalı').not.toContain('*');
+      expect(p.metin).not.toContain('_');
+    }
+    const govde = o.havuz.map(p => p.metin);
+    expect(govde.join(' ')).toContain('Köpekli Kadın');       // metin duruyor
+    expect(govde.join(' ')).toContain('ders kitaplarında');
+    console.log('\nBİLDİRİM GÖVDELERİ:\n  ' + govde.join('\n  '));
+  });
+
+  test('E) yerleşim kuralı: mdMini ve mdDuz AYNI dosyada; parcala kopya tutmuyor', async () => {
+    const kok = path.join(__dirname, '..');
+    const html = fs.readFileSync(path.join(kok, 'index.html'), 'utf8');
+    expect(html).toContain('function mdMini(ham){');
+    expect(html).toContain('function mdDuz(ham){');
+    // ikisi yan yana: aralarında en çok 40 satır olsun (birlikte okunsunlar)
+    const a = html.slice(0, html.indexOf('function mdMini(ham){')).split('\n').length;
+    const b = html.slice(0, html.indexOf('function mdDuz(ham){')).split('\n').length;
+    expect(Math.abs(b - a), 'mdMini ile mdDuz yan yana durmalı').toBeLessThan(40);
+    // bildirim.js markdown kuralının KOPYASINI tutmuyor, mdDuz'u çağırıyor
+    const bd = fs.readFileSync(path.join(kok, 'bildirim.js'), 'utf8');
+    expect(bd).toContain('mdDuz(p)');
+    const sw = fs.readFileSync(path.join(kok, 'sw.js'), 'utf8');
+    expect(parseInt((sw.match(/const CACHE = ONEK \+ '-v(\d+)';/) || [])[1]))
+      .toBeGreaterThanOrEqual(103);
+  });
+});
