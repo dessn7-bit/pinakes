@@ -1518,6 +1518,453 @@
     return g;
   }
 
+  /* ========== KÜTÜPHANE DOSYASI (v100) — TAM DEĞİŞTİRME geri yükleme ==========
+     Ayarlar ▸ İçe/dışa aktarım ▸ "Kütüphane dosyası". Uygulamanın kendi JSON
+     yedeğini (disaAktar biçimi: surum, tarih, kitaplar, hedef + hedefG,
+     hedefSayfa + hedefSayfaG, silinenler, kesfetGizli + kesfetGizliGeri,
+     turRed + turRedGeri, ozetler) kütüphanenin YENİ HÂLİ sayar. Çekirdek
+     iceAktar BİRLEŞTİRİR (ad+yazar mükerreri atlar, hiç silmez) — dışarıda
+     toplu düzeltilmiş bir dosya (ad/künye düzeltmesi, silme, ekleme) o yoldan
+     uygulanamıyordu. Bu yol id-bazlı tam değiştirmedir.
+     AKIŞ: dosya → DOĞRULAMA (JSON · kitaplar dizisi · her kayıtta ad+yazar ·
+     surum === YEDEK_SURUM · id tekrarı yok · boş dizi değil; biri düşerse HİÇ
+     yazılmaz, nedenleri pencerede) → PLAN (id eşlemesi: eklenecek /
+     güncellenecek / silinecek / aynı) → ONAY penceresi (sayılar + TAM
+     DEĞİŞTİRME uyarısı + listeler; onaysız tek bayt yok) → yazımdan HEMEN ÖNCE
+     anlık kopya (IndexedDB kk_geri_v1, tek kayıt 'son': veri + özetler) →
+     yazım → liste tazelenir, sayılar toast'ta.
+     SENKRON UYUMU: silinen kayıt için silinenler mezarı (gorunum.js toplu-sil
+     yolunun aynısı: veri.silinenler[id] = t); güncellenen/eklenen kayıt k.g = t
+     (LWW'de bu cihaz kazanır); AYNI kalan kayıt mevcut nesnesiyle kalır (damga
+     ve parmak izi dokunulmaz); mezarı olan bir id dosyada varsa g = t + mezar
+     düşer (zombi engeli). Tercih haritaları (kesfetGizli/turRed + geri) ve
+     mezarlar öz-damgalı UNION'dur — senkrondan dirileceği için değiştirme
+     değil en-yeni-damga birleşimi. Hedefler dosyadan; değeri değişen yıl
+     damgalanır. Özet işaretleri (ozetVar/ozetUzunluk/ozetG) yerel IDB'den
+     yeniden türetilir — dosyadaki bayat işaret yerelle çelişmesin.
+     ÖZETLER (Kaan kararı, 2026-09-04): DAMGA KAPILI — dosyadaki özet yalnız
+     damgası yereldekinden YENİYSE yazılır (iceAktar kuralı); yalnız yeni
+     kütüphanede yaşayan kitaplar için (yetim üretmez).
+     GERİ AL: kk_geri_v1'deki son anlık kopya AYNI boruya "dosya" olarak girer
+     (yapısal doğrulama → önizleme → onay → yazım); yazım yine anlık kopya alır →
+     geri almanın kendisi de bir adım geri alınabilir. Yüklemenin yazdığı özet
+     id'leri kopyada tutulur; geri almada bunlar damga kapısı OLMADAN (taze
+     damgayla) kopyadaki hâline döner — kapı olsaydı yüklemenin taze damgası
+     geri almayı yenerdi.
+     KAPSAM DIŞI: kapak fotoğrafları (cihaz-yerel blob, yedekte yok) — silinen
+     kitabın fotoğrafına DOKUNULMAZ; açılış yetim süpürücüsü (kapak.js) sonraki
+     yüklemede toplar; geri alma fotoğrafı geri getiremez.
+     AD ALANI: ky- (sınıf / data-act), ky (id). */
+  const KY_DB_AD = 'kk_geri_v1', KY_MAGAZA = 'anlik', KY_ANAHTAR = 'son';
+  const KY_HATA_TAVAN = 8;   // pencerede listelenen en çok hata; kalanı sayıyla
+  let kyDbSoz = null;
+  let kyPlan = null;   // tekil: uygula/vazgeç daima SON kurulan plana işler
+  function kyYedekSurum(){ return (typeof YEDEK_SURUM === 'number') ? YEDEK_SURUM : 2; }
+  function kyDbAc(){
+    if(kyDbSoz) return kyDbSoz;
+    kyDbSoz = new Promise((cozul, kir) => {
+      let istek;
+      try{ istek = indexedDB.open(KY_DB_AD, 1); }
+      catch(e){ kir(e); return; }
+      istek.onupgradeneeded = () => {
+        const db = istek.result;
+        if(!db.objectStoreNames.contains(KY_MAGAZA)) db.createObjectStore(KY_MAGAZA);
+      };
+      istek.onsuccess = () => {
+        const db = istek.result;
+        db.onclose = () => { kyDbSoz = null; };
+        db.onversionchange = () => { try{ db.close(); }catch(e){} kyDbSoz = null; };
+        cozul(db);
+      };
+      istek.onerror = () => kir(istek.error || new Error('IDB açılamadı'));
+      istek.onblocked = () => kir(new Error('IDB engellendi'));
+    });
+    kyDbSoz.catch(() => { kyDbSoz = null; });
+    return kyDbSoz;
+  }
+  function kyIslem(mod, gorev){
+    return kyDbAc().then(db => new Promise((cozul, kir) => {
+      let sonuc, tx;
+      try{ tx = db.transaction(KY_MAGAZA, mod); sonuc = gorev(tx.objectStore(KY_MAGAZA)); }
+      catch(e){ kyDbSoz = null; kir(e); return; }
+      tx.oncomplete = () => cozul(sonuc ? sonuc.result : undefined);
+      tx.onerror = () => kir(tx.error || new Error('işlem hatası'));
+      tx.onabort = () => kir(tx.error || new Error('işlem iptal'));
+    }));
+  }
+  function kyAnlikOku(){
+    return kyIslem('readonly', st => st.get(KY_ANAHTAR)).catch(() => null)
+      .then(k => (k && typeof k === 'object') ? k : null);
+  }
+  function kyAnlikYaz(kayit){ return kyIslem('readwrite', st => st.put(kayit, KY_ANAHTAR)); }
+
+  /* DOĞRULAMA — dönüş: hata dizisi (boş = geçerli). Hiçbir şey yazmaz.
+     gevsek: anlık kopya (uygulamanın kendi verisi) — kayıt-düzeyi ad/yazar
+     kapısı uygulanmaz (form yazarı zorunlu tutmaz; kopyada yazarsız kitap
+     olabilir, geri alma bu yüzden kilitlenmemeli). Yapısal kapılar aynen. */
+  function kyDogrula(y, gevsek){
+    const h = [];
+    if(!y || typeof y !== 'object' || Array.isArray(y)){
+      h.push('Dosyanın üst düzeyi bir nesne değil — Pinakes kütüphane yedeği değil.'); return h; }
+    if(!Array.isArray(y.kitaplar)){
+      h.push('Dosyada "kitaplar" dizisi yok — Pinakes kütüphane yedeği değil.'); return h; }
+    const beklenen = kyYedekSurum();
+    if(y.surum === undefined || y.surum === null) h.push('Dosyada "surum" alanı yok; uygulama ' + beklenen + ' bekliyor.');
+    else if(y.surum !== beklenen) h.push('Yedek sürümü uyumsuz: dosyada ' + esc(String(y.surum)) + ', uygulama ' + beklenen + ' bekliyor.');
+    if(!y.kitaplar.length) h.push('Dosyada hiç kitap yok — tam değiştirme kütüphaneyi boşaltırdı. Boşaltmak için Tehlikeli bölge\'yi kullan.');
+    const idler = new Set(); let fazla = 0;
+    const ekle = m => { if(h.length < KY_HATA_TAVAN) h.push(m); else fazla++; };
+    y.kitaplar.forEach((k, i) => {
+      const n = i + 1;
+      if(!k || typeof k !== 'object' || Array.isArray(k)){ ekle(n + '. kayıt bir nesne değil.'); return; }
+      if(!gevsek){
+        const ad = String(k.ad == null ? '' : k.ad).trim(), yazar = String(k.yazar == null ? '' : k.yazar).trim();
+        if(!ad) ekle(n + '. kayıt: ad alanı boş' + (yazar ? ' (yazar: ' + esc(yazar) + ')' : '') + '.');
+        if(!yazar) ekle(n + '. kayıt: yazar alanı boş' + (ad ? ' (ad: ' + esc(ad) + ')' : '') + '.');
+      }
+      if(k.id != null && k.id !== ''){
+        const id = String(k.id);
+        if(idler.has(id)) ekle(n + '. kayıt: id tekrar ediyor (' + esc(id) + ').');
+        idler.add(id);
+      }
+    });
+    if(fazla) h.push('… ve ' + fazla + ' hata daha.');
+    return h;
+  }
+  /* Karşılaştırma izi: senkron.js kitapParmak'ın aynası — g, ozet* ve notların
+     tekrar* alanları DIŞARIDA (türetilmiş / ayrı kanal; onların farkı
+     "güncelleme" sayılmaz). İki taraf da kitapNormalize'dan geçer ki alan
+     sırası ve şekli birebir olsun. */
+  function kyIz(k){
+    const c = kitapNormalize(k); delete c.g;
+    delete c.ozet; delete c.ozetVar; delete c.ozetUzunluk; delete c.ozetG;
+    /* Notların tekrar* alanları da iz DIŞI (tekrar.js'in ayrı kanalı). Dizi
+       YERİNDE değiştirilmez: iz nesnesi kopyadan kurulur — g94 kaynak kilidi
+       zengin.js'te iceNotUygula dışında notlar dizisine yazım aramaz ve burada
+       gerçekten yazım yok. Spread `notlar`ı yerinde tutar → anahtar sırası,
+       dolayısıyla iz dizgesi, kayıtlar arasında karşılaştırılabilir kalır. */
+    if(Array.isArray(c.notlar)){
+      const temizNotlar = c.notlar.map(n => {
+        const t = { ...n };
+        delete t.tekrarSonraki; delete t.tekrarAralik; delete t.tekrarSayisi; delete t.tekrarDurum;
+        return t;
+      });
+      return JSON.stringify({ ...c, notlar: temizNotlar });
+    }
+    return JSON.stringify(c);
+  }
+  const KY_ALAN_AD = { ad: 'ad', adTr: 'Türkçe ad', yazar: 'yazar', yayinevi: 'yayınevi', yil: 'yıl',
+    sayfa: 'sayfa', tur: 'tür', isbn: 'ISBN', durum: 'durum', puan: 'puan', puanYok: 'puan yok işareti',
+    etiketler: 'etiketler', notlar: 'notlar', cevirmen: 'çevirmen', dil: 'dil', seri: 'seri', ciltNo: 'cilt',
+    raf: 'raf', sahiplik: 'sahiplik', kapak: 'kapak', kapakYerel: 'kapak fotoğrafı işareti',
+    baslamaTarihi: 'başlama tarihi', bitisTarihi: 'bitiş tarihi', ertelemeTarihi: 'erteleme',
+    guncelSayfa: 'güncel sayfa', gsG: 'ilerleme damgası', okumalar: 'okumalar', seanslar: 'seanslar',
+    oturumlar: 'oturumlar', odunc: 'ödünç', eklenme: 'eklenme', silinenNotlar: 'not mezarları' };
+  function kyDegisenAlanlar(eski, yeni){
+    const a = JSON.parse(kyIz(eski)), b = JSON.parse(kyIz(yeni));
+    const alanlar = [];
+    for(const anah of new Set(Object.keys(a).concat(Object.keys(b))))
+      if(JSON.stringify(a[anah]) !== JSON.stringify(b[anah])) alanlar.push(KY_ALAN_AD[anah] || anah);
+    return alanlar;
+  }
+  function kyDamgaBirlestir(a, b){   // öz-damgalı harita UNION'u: anahtar başına en yeni damga
+    const c = {};
+    for(const kaynak of [a, b]){
+      if(!kaynak || typeof kaynak !== 'object' || Array.isArray(kaynak)) continue;
+      for(const [k, v] of Object.entries(kaynak)){
+        const n = Number(v);
+        if(Number.isFinite(n) && n > 0 && !(c[k] >= n)) c[k] = n;
+      }
+    }
+    return c;
+  }
+  function kyHedefDegisirMi(eski, yeni){
+    if(!yeni || typeof yeni !== 'object' || Array.isArray(yeni)) return false;
+    const e = eski || {};
+    for(const a of new Set(Object.keys(e).concat(Object.keys(yeni))))
+      if(String(e[a] == null ? '' : e[a]) !== String(yeni[a] == null ? '' : yeni[a])) return true;
+    return false;
+  }
+  /* DAMGA KAPILI özet girişleri → [id, {m,g,o}, zorla]. Yalnız yeni
+     kütüphanede yaşayan id'ler; dosya damgası > yerel damga. zorla: geri
+     almada yüklemenin yazdığı id'ler — kapısız, kopyadaki hâline (kopyada
+     hiç yoksa MEZAR: boş metin) taze damgayla döner. */
+  function kyOzetGirisleri(y, canliIdler, zorla){
+    if(!window.__ozet || !y.ozetler || typeof y.ozetler !== 'object' || Array.isArray(y.ozetler)) return [];
+    const zorlaSet = new Set((zorla || []).map(String));
+    const cikti = [];
+    for(const [id, o] of Object.entries(y.ozetler)){
+      if(!canliIdler.has(String(id))) continue;
+      const kayit = (o && typeof o === 'object') ? o : null;
+      if(zorlaSet.has(String(id))){ cikti.push([String(id), kayit || { m: '', g: 0, o: '' }, true]); continue; }
+      if(!kayit || typeof kayit.m !== 'string') continue;
+      if((parseInt(kayit.g) || 0) > window.__ozet.damga(id)) cikti.push([String(id), kayit, false]);
+    }
+    for(const id of zorlaSet)
+      if(canliIdler.has(id) && !Object.prototype.hasOwnProperty.call(y.ozetler, id))
+        cikti.push([id, { m: '', g: 0, o: '' }, true]);
+    return cikti;
+  }
+  /* PLAN — dosya (normalize edilmiş kayıtlar) ↔ MEVCUT veri, id eşlemesi.
+     Hiçbir şey yazmaz; uygulama anında YENİDEN kurulur (önizleme açıkken
+     senkron veri.kitaplar'ı değiştirmiş olabilir). */
+  function kyPlanKur(y, zorla){
+    const mevcut = new Map((veri.kitaplar || []).map(k => [String(k.id), k]));
+    const dosyaIdler = new Set();
+    const plan = { y, ekle: [], guncelle: [], sil: [], ayni: 0,
+      dosyaSayi: y.kitaplar.length, mevcutSayi: mevcut.size,
+      hedefDegisir: false, ozetYazilacak: 0, ozetToplam: 0, idDegisen: 0 };
+    for(const r of y.kitaplar){
+      const id = String(r.id); dosyaIdler.add(id);
+      const m = mevcut.get(id);
+      if(!m) plan.ekle.push({ id, ad: r.ad, yazar: r.yazar });
+      else if(kyIz(m) === kyIz(r)) plan.ayni++;
+      else plan.guncelle.push({ id, ad: r.ad, yazar: r.yazar, alanlar: kyDegisenAlanlar(m, r) });
+    }
+    for(const [id, m] of mevcut) if(!dosyaIdler.has(id)) plan.sil.push({ id, ad: m.ad, yazar: m.yazar });
+    /* ad + yazar aynı ama id farklı: silinip yeniden eklenecek çift — dosyanın
+       id'leri yeniden üretilmişse kullanıcı önizlemede fark etsin (bilgi satırı) */
+    const anah = k => katla(k.ad) + '|' + katla(k.yazar || '');
+    const silAnah = new Set(plan.sil.map(anah));
+    plan.idDegisen = plan.ekle.filter(e => silAnah.has(anah(e))).length;
+    plan.hedefDegisir = kyHedefDegisirMi(veri.hedef, y.hedef) || kyHedefDegisirMi(veri.hedefSayfa, y.hedefSayfa);
+    if(y.ozetler && typeof y.ozetler === 'object' && !Array.isArray(y.ozetler)){
+      plan.ozetToplam = Object.keys(y.ozetler).length;
+      plan.ozetYazilacak = kyOzetGirisleri(y, dosyaIdler, zorla).length;
+    }
+    return plan;
+  }
+  function kyHedefUygula(alan, damgaAlan, y, t){
+    if(!y[alan] || typeof y[alan] !== 'object' || Array.isArray(y[alan])) return;   // dosyada yoksa dokunma
+    const eski = veri[alan] || {};
+    const damga = kyDamgaBirlestir(veri[damgaAlan], y[damgaAlan]);
+    const yeni = {};
+    for(const [yil, v] of Object.entries(y[alan])){
+      const n = Number(v);
+      if(!Number.isFinite(n) || n <= 0) continue;
+      yeni[yil] = n;
+      if(String(eski[yil] == null ? '' : eski[yil]) !== String(n)) damga[yil] = t;   // değeri değişen yıl: bu cihaz kazanır
+    }
+    veri[alan] = yeni; veri[damgaAlan] = damga;
+  }
+  /* özet işaretleri yerel depodan (doğruluk kaynağı IDB) — depo hazır değilse
+     dokunma (boş okuma tüm işaretleri söndürürdü) */
+  function kyOzetIsaretleriTazele(kitaplar){
+    if(!window.__ozet || !window.__ozet.hazir) return;
+    for(const k of kitaplar){
+      const m = window.__ozet.oku(k.id) || '', g = window.__ozet.damga(k.id);
+      if(k.ozetVar !== !!m || k.ozetUzunluk !== m.length || (k.ozetG || 0) !== g){
+        k.ozetVar = !!m; k.ozetUzunluk = m.length; k.ozetG = g;
+      }
+    }
+  }
+  function kyTarih(t){
+    try{ return new Date(t).toLocaleString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+    catch(e){ return String(t); }
+  }
+  function kyBaslikYaz(metin){
+    const b = document.querySelector('#kyOrtu .sheet-baslik');
+    if(b) b.textContent = metin;
+  }
+  function kyDosyaKur(){   // notDosyaKur'un aynı-kalıp kopyası (kyDosya)
+    let g = document.getElementById('kyDosya');
+    if(!g){
+      g = document.createElement('input');
+      g.type = 'file'; g.id = 'kyDosya';
+      g.accept = '.json,application/json'; g.hidden = true;
+      document.body.appendChild(g);
+    }
+    if(!g.__zgBagli){
+      g.__zgBagli = true;
+      g.addEventListener('change', e => {
+        const f = e.target.files && e.target.files[0];
+        if(f) kyOku(f);
+        e.target.value = '';
+      });
+    }
+    return g;
+  }
+  async function kyOku(dosya){
+    let govde;
+    try{ govde = JSON.parse(await dosya.text()); }
+    catch(e){ kyHataCiz(['Dosya okunamadı — geçerli bir JSON değil.'], dosya.name); return; }
+    if(window.__ozet && window.__ozet.hazirBekle) await window.__ozet.hazirBekle();   // özet damgaları için
+    kyBaslat(govde, { kaynak: 'dosya', dosyaAdi: dosya.name || '' });
+  }
+  function kyBaslat(govde, ek){
+    const hatalar = kyDogrula(govde, ek.kaynak === 'geri');
+    if(hatalar.length){ kyHataCiz(hatalar, ek.dosyaAdi); return; }
+    const y = { ...govde, kitaplar: govde.kitaplar.map(kitapNormalize) };   // id'siz kayıt burada id alır (plan ve yazım aynı id)
+    const plan = Object.assign(kyPlanKur(y, ek.ozetZorla), ek);
+    kyPlan = plan;
+    kyOnizleCiz(plan);
+  }
+  function kyHataCiz(hatalar, dosyaAdi){
+    kyPlan = null;
+    ortuKur('kyOrtu', 'Kütüphane dosyası yükle');
+    kyBaslikYaz('Kütüphane dosyası yükle');
+    const g = document.getElementById('kyOrtuGovde');
+    if(!g) return;
+    g.innerHTML =
+      '<div class="ky-ozet">' + (dosyaAdi ? esc(dosyaAdi) + ' — ' : '') + 'dosya <b>doğrulamadan geçemedi</b>, hiçbir şey yazılmadı.</div>' +
+      '<ul class="ky-hata">' + hatalar.map(h => '<li>' + h + '</li>').join('') + '</ul>' +
+      '<p class="ky-uyari">Dosyayı düzeltip yeniden seçebilirsin. Beklenen biçim: uygulamanın "JSON indir" çıktısı ' +
+        '(surum ' + kyYedekSurum() + ', "kitaplar" dizisi, her kayıtta ad + yazar).</p>' +
+      '<div class="form-alt"><button class="btn btn-cerceve" data-act="ky-vazgec" style="flex:1">Kapat</button></div>';
+    ac('kyOrtu');
+  }
+  function kyOnizleCiz(plan){
+    ortuKur('kyOrtu', 'Kütüphane dosyası yükle');
+    const geri = plan.kaynak === 'geri';
+    kyBaslikYaz(geri ? 'Geri al — önceki duruma dön' : 'Kütüphane dosyası yükle');
+    const g = document.getElementById('kyOrtuGovde');
+    if(!g) return;
+    const satir = (ad, alan) => '<div class="ky-satir"><span class="ky-ad">' + esc(ad) + '</span>' +
+      '<span class="ky-alan">' + alan + '</span></div>';
+    const katla_ = (baslik, satirlar) => satirlar.length
+      ? '<details class="ky-katla"><summary>' + baslik + ' (' + satirlar.length + ')</summary>' +
+        '<div class="ky-liste">' + satirlar.join('') + '</div></details>'
+      : '';
+    const ozet1 = (geri ? 'Anlık kopyada' : 'Dosyada') + ' <b>' + plan.dosyaSayi + '</b> kayıt · mevcut <b>' + plan.mevcutSayi + '</b> kayıt';
+    const ozet2 = ['<b>' + plan.ekle.length + '</b> eklenecek', '<b>' + plan.guncelle.length + '</b> güncellenecek',
+      '<b>' + plan.sil.length + '</b> silinecek', plan.ayni + ' aynı kalacak'];
+    if(plan.idDegisen) ozet2.push(plan.idDegisen + ' kayıt ad + yazar aynı ama id farklı (silinip yeniden eklenecek)');
+    if(plan.hedefDegisir) ozet2.push('yıl hedefleri ' + (geri ? 'kopyadaki' : 'dosyadaki') + ' değerlerle değişecek');
+    if(plan.ozetToplam) ozet2.push(plan.ozetYazilacak
+      ? '<b>' + plan.ozetYazilacak + '</b> özet ' + (geri ? 'kopyadan geri gelecek' : 'dosyadan yazılacak (damgası yereldekinden yeni)')
+      : (geri ? 'özetlerde değişiklik yok' : 'dosyadaki ' + plan.ozetToplam + ' özetin hiçbiri yereldekinden yeni değil — özetlere dokunulmayacak'));
+    const uyari = geri
+      ? 'Önceki duruma dönüş: ' + esc(kyTarih(plan.kopyaTarihi)) + ' tarihli anlık kopya kütüphanenin yeni hâli olur — ' +
+        'kopyada olmayan <b>' + plan.sil.length + '</b> kayıt <b>SİLİNİR</b>. Bu geri alma da bir adım geri alınabilir: yazımdan ' +
+        'hemen önce şimdiki durumun anlık kopyası alınır. Onaylamadan hiçbir şey değişmez.'
+      : 'Bu işlem <b>TAM DEĞİŞTİRME</b>dir, birleştirme değil: kütüphane dosyadaki hâle getirilir. Dosyada olmayan ' +
+        '<b>' + plan.sil.length + '</b> kayıt — notları, alıntıları ve oturumlarıyla — <b>SİLİNİR</b>. Yazmadan hemen önce ' +
+        'mevcut durumun anlık kopyası alınır; Ayarlar ▸ Kütüphane dosyası altındaki <b>Geri al</b> ile tek adım geri ' +
+        'dönebilirsin. Onaylamadan hiçbir şey değişmez.';
+    const dugme = (plan.ekle.length + plan.guncelle.length + plan.sil.length)
+      ? 'Uygula (' + plan.ekle.length + ' ekle, ' + plan.guncelle.length + ' güncelle, ' + plan.sil.length + ' sil)'
+      : 'Uygula (kayıt değişikliği yok)';
+    g.innerHTML =
+      '<div class="ky-ozet">' + ozet1 + '</div>' +
+      '<div class="ky-ozet">' + ozet2.join(' · ') + '</div>' +
+      '<p class="ky-uyari">' + uyari + '</p>' +
+      katla_('Silinecekler', plan.sil.map(s => satir(s.ad, esc(s.yazar || '')))) +
+      katla_('Eklenecekler', plan.ekle.map(s => satir(s.ad, esc(s.yazar || '')))) +
+      katla_('Güncellenecekler', plan.guncelle.map(s => satir(s.ad,
+        esc(s.yazar || '') + (s.alanlar.length ? ' — değişen: ' + esc(s.alanlar.join(', ')) : '')))) +
+      '<div class="form-alt">' +
+        '<button class="btn btn-cerceve" data-act="ky-vazgec" style="flex:1">Vazgeç</button>' +
+        '<button class="btn btn-cerceve" data-act="ky-uygula" style="flex:2">' + dugme + '</button>' +
+      '</div>';
+    ac('kyOrtu');
+  }
+  function kyVazgec(){
+    const vardi = !!kyPlan;
+    kyPlan = null;
+    kapat('kyOrtu');
+    if(vardi) bildir('Vazgeçildi — hiçbir şey yazılmadı');
+  }
+  /* YAZIM — sıra: (1) anlık kopya IDB'ye (alınamazsa HİÇ yazılmaz), (2) plan
+     uygulama anında yeniden kurulur, bellek değişir, depoKaydet (senkron
+     sarmalı: damgala + iz + planla), liste tazelenir, (3) özetler damga
+     kapılı, (4) toast sayılarla. */
+  async function kyUygula(){
+    const plan = kyPlan;
+    if(!plan || plan.calisiyor) return;
+    plan.calisiyor = true;
+    const y = plan.y;
+    const geri = plan.kaynak === 'geri';
+    const taze = kyPlanKur(y, geri ? plan.ozetZorla : null);
+    const canli = new Set(y.kitaplar.map(r => String(r.id)));
+    const ozetGirisler = kyOzetGirisleri(y, canli, geri ? plan.ozetZorla : null);
+    const kopya = { tarih: Date.now(), kaynak: plan.kaynak, dosyaAdi: plan.dosyaAdi || '', surum: kyYedekSurum(),
+      veri: JSON.parse(JSON.stringify(veri)),
+      ozetler: (window.__ozet && window.__ozet.hepsiDisa) ? window.__ozet.hepsiDisa() : {},
+      kitapSayi: (veri.kitaplar || []).length,
+      ozetYazilan: ozetGirisler.map(g => g[0]),
+      sonuc: { ekle: taze.ekle.length, guncelle: taze.guncelle.length, sil: taze.sil.length } };
+    try{ await kyAnlikYaz(kopya); }
+    catch(e){
+      plan.calisiyor = false;
+      window._iz && window._iz('kyAnlikYaz', e);
+      bildir('Anlık kopya alınamadı — hiçbir şey yazılmadı');
+      return;
+    }
+    const t = Date.now();
+    const mevcut = new Map((veri.kitaplar || []).map(k => [String(k.id), k]));
+    const yeni = [], eklenen = [];
+    for(const r of y.kitaplar){
+      const m = mevcut.get(String(r.id));
+      if(m && kyIz(m) === kyIz(r)){ yeni.push(m); continue; }   // AYNI: mevcut nesne, damga korunur
+      const k = kitapNormalize(r); k.g = t;                      // güncellenen / eklenen: bu cihaz LWW'de kazanır
+      if(!m) eklenen.push(k.id);
+      yeni.push(k);
+    }
+    const silinenler = kyDamgaBirlestir(veri.silinenler, y.silinenler);
+    for(const s of taze.sil) silinenler[s.id] = t;              // toplu-sil yolunun mezarı
+    for(const k of yeni) if(silinenler[k.id]){                   // zombi engeli: mezarlı id dosyada yaşıyorsa
+      if(silinenler[k.id] >= (k.g || 0)) k.g = t;
+      delete silinenler[k.id];
+    }
+    veri.kitaplar = yeni;
+    veri.silinenler = silinenler;
+    kyHedefUygula('hedef', 'hedefG', y, t);
+    kyHedefUygula('hedefSayfa', 'hedefSayfaG', y, t);
+    for(const a of ['kesfetGizli', 'kesfetGizliGeri', 'turRed', 'turRedGeri']) veri[a] = kyDamgaBirlestir(veri[a], y[a]);
+    kyOzetIsaretleriTazele(yeni);
+    const depoTamam = (typeof depoKaydet === 'function') ? depoKaydet() : true;
+    kyPlan = null;
+    kapat('kyOrtu');
+    if(typeof hepsiniCiz === 'function') hepsiniCiz();
+    let ozetYazildi = 0;
+    if(ozetGirisler.length){
+      const sonuclar = await Promise.all(ozetGirisler.map(([id, o, zor]) => {
+        const g = zor ? Math.max(parseInt(o.g) || 0, Date.now()) : o.g;
+        const onto = (o.o === undefined || o.o === null) ? (zor ? '' : undefined) : o.o;
+        return Promise.resolve(window.__ozet.kaydetHam(id, o.m, g, onto)).catch(() => false);
+      }));
+      ozetYazildi = sonuclar.filter(Boolean).length;
+      if(ozetYazildi){
+        kyOzetIsaretleriTazele(veri.kitaplar);
+        if(typeof depoKaydet === 'function') depoKaydet();
+        if(typeof listeCiz === 'function') listeCiz();
+      }
+    }
+    if(typeof taslakAday === 'function') eklenen.forEach(id => taslakAday(id));
+    durumTazele();
+    kyGeriKartTazele();
+    bildir((geri ? 'Geri alındı' : 'Kütüphane dosyadan yüklendi') + ' — ' + yeni.length + ' kayıt işlendi: ' +
+      taze.ekle.length + ' eklendi, ' + taze.guncelle.length + ' güncellendi, ' + taze.sil.length + ' silindi' +
+      (ozetYazildi ? ', ' + ozetYazildi + ' özet yazıldı' : '') +
+      (depoTamam === false ? ' — DİKKAT: depo yazılamadı (kota)' : ''));
+  }
+  async function kyGeriKartTazele(){
+    const kart = document.getElementById('kyGeriKart');
+    if(!kart) return;
+    const kopya = await kyAnlikOku();
+    if(!kopya || !kopya.veri || !Array.isArray(kopya.veri.kitaplar)){ kart.hidden = true; kart.innerHTML = ''; return; }
+    const ne = kopya.kaynak === 'geri' ? 'geri alma'
+      : 'kütüphane dosyası yüklemesi' + (kopya.dosyaAdi ? ' (' + esc(kopya.dosyaAdi) + ')' : '');
+    const s = kopya.sonuc || {};
+    kart.innerHTML =
+      '<b>Geri alınabilir:</b> ' + esc(kyTarih(kopya.tarih)) + ' — ' + ne + ' öncesi durum, <b>' +
+      kopya.veri.kitaplar.length + '</b> kayıt' +
+      ((s.ekle || s.guncelle || s.sil)
+        ? ' (o işlem: ' + (s.ekle || 0) + ' ekleme, ' + (s.guncelle || 0) + ' güncelleme, ' + (s.sil || 0) + ' silme)' : '') +
+      '. Anlık kopya bu cihazda, tarayıcının IndexedDB deposunda (' + KY_DB_AD + ') durur; yalnız son işlem ' +
+      'saklanır, senkrona ve yedeğe girmez. Geri alma da bir adım geri alınabilir.' +
+      '<div><button class="btn btn-cerceve" data-act="ky-geri">Geri al</button></div>';
+    kart.hidden = false;
+  }
+  async function kyGeriBaslat(){
+    const kopya = await kyAnlikOku();
+    if(!kopya || !kopya.veri || !Array.isArray(kopya.veri.kitaplar)){ bildir('Geri alınacak anlık kopya yok'); return; }
+    if(window.__ozet && window.__ozet.hazirBekle) await window.__ozet.hazirBekle();
+    const govde = { surum: kopya.surum || kyYedekSurum(), ...kopya.veri, ozetler: kopya.ozetler || {} };
+    kyBaslat(govde, { kaynak: 'geri', dosyaAdi: '', kopyaTarihi: kopya.tarih,
+      ozetZorla: Array.isArray(kopya.ozetYazilan) ? kopya.ozetYazilan : [] });
+  }
+
   /* ---------- tarama döngüsü ---------- */
   async function taramaBaslat(){
     if(calisiyor) return;
@@ -2021,6 +2468,24 @@
     '.zg-ozet{font-size:.85rem;color:var(--muted);margin:8px 0;line-height:1.5}',
     '.zg-ozet b{color:var(--paper);font-variant-numeric:tabular-nums}',
     '.zg-not{font-size:.8rem;color:var(--muted);margin-top:10px;line-height:1.5}',
+    /* ky- (v100): kütüphane dosyası önizleme / hata / geri al kartı — zg-
+       reçetesinin ayrı kopyası (yeni UI = yeni önek; testlerin genel
+       seçicileri gölgelenmesin) */
+    '.ky-ozet{font-size:.85rem;color:var(--muted);margin:8px 0;line-height:1.5}',
+    '.ky-ozet b{color:var(--paper);font-variant-numeric:tabular-nums}',
+    '.ky-uyari{font-size:.8rem;line-height:1.5;margin-top:10px;padding:10px 12px;border:1px solid var(--kontur);border-left:3px solid var(--brass);border-radius:var(--r-md);color:var(--paper)}',
+    '.ky-hata{font-size:.85rem;line-height:1.5;margin:8px 0;padding-left:18px;color:var(--paper)}',
+    '.ky-katla{margin-top:12px;border:1px solid var(--kontur);border-radius:var(--r-md)}',
+    '.ky-katla summary{list-style:none;cursor:pointer;padding:10px 14px;font-size:.85rem;color:var(--muted)}',
+    '.ky-katla summary::-webkit-details-marker{display:none}',
+    '.ky-liste{padding:0 14px 10px;max-height:44vh;overflow-y:auto}',
+    '.ky-satir{padding:9px 0;border-bottom:1px solid var(--cizgi)}',
+    '.ky-ad{display:block;font-family:var(--serif);font-weight:600;font-size:.9rem}',
+    '.ky-alan{display:block;font-size:.75rem;color:var(--muted);margin-top:2px}',
+    '.ky-geri{margin-top:12px;padding:10px 12px;border:1px solid var(--kontur);border-radius:var(--r-md);font-size:.8rem;color:var(--muted);line-height:1.5}',
+    '.ky-geri b{color:var(--paper)}',
+    '.ky-geri .btn{margin-top:8px}',
+    '.ky-geri[hidden]{display:none}',
     '.zg-katla{margin-top:12px;border:1px solid var(--kontur);border-radius:var(--r-md)}',
     '.zg-katla summary{list-style:none;cursor:pointer;padding:10px 14px;font-size:.85rem;color:var(--muted)}',
     '.zg-katla summary::-webkit-details-marker{display:none}',
@@ -2129,6 +2594,11 @@
         case 'zg-not-ice': notDosyaKur(); document.getElementById('zgNotDosya').click(); break;
         case 'zg-not-uygula': iceUygula(); break;   // iceUygula not planında iceNotUygula dalını seçer
         case 'zg-not-vazgec': iceVazgec(); break;
+        // v100: kütüphane dosyası (TAM DEĞİŞTİRME) — düğme HTML'i index.html'de (data-act="ky-ice")
+        case 'ky-ice': kyDosyaKur(); document.getElementById('kyDosya').click(); break;
+        case 'ky-uygula': kyUygula(); break;
+        case 'ky-vazgec': kyVazgec(); break;
+        case 'ky-geri': kyGeriBaslat(); break;
         case 'zg-oto-liste':
           ortuKur('zgOtoOrtu', 'Otomatik atanan türler');
           otoListeCiz(); ac('zgOtoOrtu');
@@ -2156,6 +2626,7 @@
         case 'zg-atla-tarih': tarihSira++; tarihCiz_(); break;
         case 'ayar-ac':   // kapak/ocr/bildirim ile aynı kalıp
           durumTazele(); otoKartEkle(); otoDurumTazele();
+          kyGeriKartTazele();   // v100: geri alınabilir anlık kopya varsa kartı göster
           break;
       }
     });
@@ -2175,4 +2646,7 @@
     otoTur, otoAdaylar, atananGecerli, taksonomiKur: t => { taksonomi = t; },
     redAktif, redListesi,   // v91: geri alma defteri
     ARALIK_MS, ALANLAR, KUYRUK_ANAHTAR, OTO_DENEME_ANAHTAR, OTO_ATANAN_ANAHTAR };
+  /* v100: kütüphane dosyası (tam değiştirme) test kancaları — hiçbiri yazmaz */
+  window.__ky = { dogrula: kyDogrula, planKur: kyPlanKur, iz: kyIz, anlikOku: kyAnlikOku,
+    ozetGirisleri: kyOzetGirisleri, DB_AD: KY_DB_AD, MAGAZA: KY_MAGAZA, ANAHTAR: KY_ANAHTAR };
 })();

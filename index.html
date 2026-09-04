@@ -1266,6 +1266,22 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
         <div class="ay-eylem">
           <button class="btn btn-cerceve" data-act="zg-not-ice">Not dosyası seç</button>
         </div>
+        <!-- Kütüphane dosyası (v100) — TAM DEĞİŞTİRME geri yükleme; mantık zengin.js'te
+             (ky- ad alanı). Yukarıdaki "Yedekten geri yükle" BİRLEŞTİRİR (ekler, silmez);
+             bu yol dosyayı kütüphanenin yeni hâli sayar: dosyada olmayan kayıt silinir.
+             Doğrulama → sayılı onay → yazımdan hemen önce anlık kopya (IndexedDB
+             kk_geri_v1) → tek adım geri al (#kyGeriKart). -->
+        <h3 class="ay-baslik">Kütüphane dosyası</h3>
+        <p class="ay-not">JSON yedeğini kütüphanenin <b>yeni hâli</b> olarak yükler — birleştirme değil,
+      <b>tam değiştirme</b>: dosyadaki kayıtlar yazılır, dosyada olmayan kayıt silinir (yukarıdaki
+      "Yedekten geri yükle" ise yalnız ekler). Dosya önce doğrulanır (kitaplar dizisi, her kayıtta
+      ad + yazar, sürüm); sonra eklenecek / güncellenecek / silinecek sayılarıyla onay istenir —
+      onaylamadan hiçbir şey değişmez. Yazmadan hemen önce mevcut durumun anlık kopyası alınır ve
+      tek adım geri alınabilir. Özetler yalnız dosyadaki damga yereldekinden yeniyse yazılır.</p>
+        <div class="ay-eylem">
+          <button class="btn btn-cerceve" data-act="ky-ice">Kütüphane dosyası seç</button>
+        </div>
+        <div class="ky-geri" id="kyGeriKart" hidden></div>
       </section>
 
       <!-- ZENGİNLEŞTİR (zg-) — mantık zengin.js'te. Eksik alan sayımı + toplu
@@ -1620,6 +1636,9 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
 'use strict';
 /* ============ Kitaplık v2 ============ */
 const DEPO = 'kk_kitaplik_v1';
+/* JSON yedek biçiminin sürümü (disaAktar / tasimaYedegiUret yazar; zengin.js
+   kütüphane dosyası yolu (v100) yalnız bu sürümü kabul eder). Biçim değişirse artır. */
+const YEDEK_SURUM = 2;
 const DURUM_AD = { okunacak:'Okunacak', okunuyor:'Okunuyor', bitti:'Bitti', yarim:'Yarım kaldı' };
 /* v41: sırt paleti Soluk Parşömen'e uyarlandı — 8 renk de üzeri (#FFFDF7) metinle
    AA (5.20-7.05) ve zeminden net ayrık (bg'ye karşı 4.61-6.24). */
@@ -3784,7 +3803,7 @@ function dosyaIndir(icerik, ad, tip){
 function tasimaEskiAdres(){ return location.pathname.indexOf('/kitaplik/') === 0; }
 function tasimaYeniAdres(){ return location.pathname.indexOf('/pinakes/') === 0; }
 async function tasimaYedegiUret(){
-  const govde = { surum: 2, tarih: new Date().toISOString(), tasima: 1, ...veri,
+  const govde = { surum: YEDEK_SURUM, tarih: new Date().toISOString(), tasima: 1, ...veri,
     ozetler: window.__ozet.hepsiDisa() };
   /* KAPAKLAR: normal yedeğe bilerek girmiyor (v27 — boyut); taşıma tek
      seferlik olduğundan burada base64 gömülür. Eklenti yoksa boş geçilir. */
@@ -3857,7 +3876,7 @@ function disaAktar(){
   /* ozetler (v80): metin IDB'de yaşadığı için ...veri spread'i artık kapsamıyor —
      özet SENKRONLANAN veridir (kapak fotoğrafının aksine), yedeğe AYRI alan
      olarak girer; iceAktar geri yükler. */
-  dosyaIndir(JSON.stringify({ surum:2, tarih:new Date().toISOString(), ...veri,
+  dosyaIndir(JSON.stringify({ surum: YEDEK_SURUM, tarih:new Date().toISOString(), ...veri,
       ozetler: window.__ozet.hepsiDisa() }, null, 2),
     `pinakes-yedek-${bugun()}.json`, 'application/json');
   toast('Yedek indirildi');
