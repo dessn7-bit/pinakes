@@ -40,7 +40,10 @@
      Eskiden ağ arızası da "bu ISBN kayıtlarda yok" diye raporlanıyordu. */
   async function isbnAra(isbn){
     const t = isbnTemizle(isbn);
-    let sonuc = null, gbHata = false, olHata = false;
+    /* v102: her kaynak KENDİ tam kaydını üretir; birleştirme yok, sonunda
+       biri seçilir (kaynak bütünlüğü kuralı). */
+    let sonuc = null, gbSonuc = null, olSonuc = null, wkSonuc = null;
+    let gbHata = false, olHata = false;
     try{
       const r = await fetch('https://www.googleapis.com/books/v1/volumes?key=' + GB_ANAHTAR
         + '&country=TR&q=isbn:' + encodeURIComponent(t));
@@ -48,7 +51,7 @@
       const j = await r.json();
       if(j.totalItems && j.items && j.items[0]){
         const v = j.items[0].volumeInfo || {};
-        sonuc = {
+        gbSonuc = {
           ad: v.title || '', yazar: (v.authors||[]).slice(0,2).join(', '),
           yayinevi: v.publisher || '',
           yil: v.publishedDate ? parseInt(v.publishedDate.slice(0,4)) || null : null,
@@ -66,7 +69,7 @@
         };
       }
     }catch(e){ gbHata = true; }
-    const gbBulundu = !!(sonuc && sonuc.ad);   // v97: Google'ın sonucu ASLA ezilmez
+    const gbBulundu = !!(gbSonuc && gbSonuc.ad);   // v97: Google'ın sonucu ASLA ezilmez
     // Open Library: eksik alanları tamamlar (özellikle yayınevi)
     try{
       const r = await fetch('https://openlibrary.org/api/books?format=json&jscmd=data&bibkeys=ISBN:' + encodeURIComponent(t));
@@ -81,31 +84,42 @@
           sayfa: d.number_of_pages || null,
           kapak: d.cover ? (d.cover.medium || d.cover.large || null) : null, tur: ''
         };
-        if(!sonuc) sonuc = ol;
-        else for(const k of ['yazar','yayinevi','yil','sayfa','kapak'])
-          if(!sonuc[k] && ol[k]) sonuc[k] = ol[k];
+        /* v102 KAYNAK BÜTÜNLÜĞÜ: eskiden OL, Google kaydının BOŞ alanlarını
+           doldururdu — tek kayıtta iki ayrı baskının künyesi karışıyordu.
+           Artık kaynaklar birleştirilmez, biri SEÇİLİR (aşağıda). */
+        olSonuc = ol;
       }
     }catch(e){ olHata = true; }
     /* v97 — 1000Kitap yedeği (worker /isbn): YALNIZ Google boş ya da arızalı
        dönerse (gbBulundu → bu dala hiç girilmez; Google sonucu ezilmez).
        ÖLÇÜM: Google Books Türkçe ISBN'de boş, Open Library seyrek ve yarım
        ("1984 [TURKISH EDITION]", sayfa/yayınevi yok); 1000Kitap künyesi baskıya
-       birebir (yayınevi/sayfa/yıl/çevirmen). OL yarım kayıt vermişse künye ÖNE
-       alınır, OL boşlukları doldurur. Worker'a ulaşılamazsa SESSİZ: eski
+       birebir (yayınevi/sayfa/yıl/çevirmen). v102'den beri OL ile BİRLEŞTİRİLMEZ — yalnız
+       aday olur, seçim aşağıda. Worker'a ulaşılamazsa SESSİZ: eski
        Google/OL davranışı aynen sürer. Worker AĞ TEŞHİSİNE GİRMEZ: agSorunu
        sözleşmesi (g13 M3) "Google + OL ikisi de yanıt veremedi" olarak kalır —
        worker yalnız veri ekler; o da bulursa zaten sonuç var, arıza raporu yok. */
     if(!gbBulundu){
       try{
-        const wk = await workerIsbn(t);
-        if(wk){
-          const ol = sonuc; sonuc = wk;
-          if(ol) for(const k of ['yazar','yayinevi','yil','sayfa','kapak'])
-            if(!sonuc[k] && ol[k]) sonuc[k] = ol[k];
-        }
+        const w = await workerIsbn(t);
+        if(w) wkSonuc = w;   // v102: birleştirme YOK, aday olarak durur
       }catch(e){ /* worker kapalı/zaman aşımı — sessiz, Google/OL sonucu neyse o */ }
     }
-    if(sonuc && !sonuc.kaynak) sonuc.kaynak = gbBulundu ? 'Google Books' : 'Open Library';
+    /* v102 KAYNAK BÜTÜNLÜĞÜ (Kaan kuralı): künye alanları TEK kaynak kaydından
+       gelir. Öncelik eskisinin aynısı — Google bulduysa o, yoksa 1000Kitap
+       (Türkçe baskılarda baskıya birebir), yoksa Open Library. Seçilen kaydın
+       boş bıraktığı alan BOŞ KALIR; başka kaynaktan doldurulmaz.
+       METİN TEMİZLİĞİ: seçilen kaydın metinleri yazımdan önce çözülür
+       (1000Kitap ham `&#039;` döndürüyor — canlı kanıt). */
+    sonuc = gbSonuc || wkSonuc || olSonuc || null;
+    if(sonuc){
+      if(!sonuc.kaynak) sonuc.kaynak = gbSonuc ? 'Google Books' : (wkSonuc ? '1000Kitap' : 'Open Library');
+      const T = (window.__zengin && window.__zengin.metinTemizle)
+        || (s => String(s == null ? '' : s).replace(/\s+/g, ' ').trim());
+      for(const alan of ['ad', 'yazar', 'yayinevi', 'cevirmen'])
+        if(sonuc[alan]) sonuc[alan] = T(sonuc[alan]);
+      if(!sonuc.ad) sonuc = null;   // adı temizlikten geçemeyen kayıt yazılmaz
+    }
     return { sonuc, agSorunu: gbHata && olHata };
   }
   /* v97: worker /isbn — Türkçe baskılar için 1000Kitap künyesi. 6 sn zaman

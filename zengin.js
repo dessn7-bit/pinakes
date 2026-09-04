@@ -303,6 +303,186 @@
     if(!a || !b) return false;
     return a.indexOf(b) >= 0 || b.indexOf(a) >= 0;
   }
+
+  /* ================== KAYNAK BÜTÜNLÜĞÜ + METİN TEMİZLİĞİ (v102) ==================
+     KUSUR (ölçüldü, canlı): boru yalnız BOŞ alanları sorguluyordu ve gelen cildin
+     kayıttaki mevcut künyeyle AYNI BASKI olup olmadığını hiç denetlemiyordu.
+     Kyklops'ta yayınevi (Türkiye İş Bankası) ve sayfa (72) zaten doluydu, yalnız
+     ISBN boştu; `intitle:"Kyklops" inauthor:"Euripides"` sorgusunun 0. sonucu
+     Walter de Gruyter'in ALMANCA baskısı (dil de, 350 s.) ve ISBN'i oradan
+     yazıldı: 9783110457384. Aynı desen Kürk Mantolu Madonna (Elips Kitap, 978-5
+     Rusya öneki — ama dili 'tr', yani salt dil kapısı YETMEZ), Antonius ve
+     Kleopatra (978-963 Macaristan) ve İş Bankası Shakespeare'lerinde tekrarladı.
+     KURAL (Kaan kararı): bir kayda yazılan KÜNYE alanları (isbn, yayinevi, yil,
+     sayfa) TEK bir kaynak kaydından gelir; kaynak alanı boş bırakıyorsa alan BOŞ
+     KALIR, başka kaynaktan doldurulmaz.
+     İSTİSNA (Kaan kararı): kapak ve tür künye sayılmaz — kapak görseldir (yanlış
+     baskının kapağı veriyi bozmaz; `isbn:` sorgusundan gelen kapak v74'te 37 ölü
+     kapağın 13'ünü kurtarmıştı), tür esere aittir, baskıdan baskıya değişmez
+     (v64'te çok cildin kategorilerini havuzlamak isabeti 4/30 → 14/30 yapmıştı).
+     BU İKİSİ İÇİN çok-kaynak SÜRÜYOR ve bilerek sürüyor. */
+
+  /* --- Metin temizliği (Kaan md. 6) — HTML varlık kodu + bozuk kodlama.
+     Kod tabanında varlık ÇÖZÜCÜ yoktu (esc yalnız kodluyor); 1000Kitap ham
+     `&#039;` döndürüyor (canlı kanıt: "Kral John&#039;un Yaşamı ve Ölümü") ve
+     bu kayda öyle yazılıyordu. Çözüm yazımdan ÖNCE, tek noktada. */
+  const VARLIK = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+    ndash: '–', mdash: '—', hellip: '…', laquo: '«', raquo: '»', shy: '',
+    rsquo: '’', lsquo: '‘', ldquo: '“', rdquo: '”' };
+  function varlikCoz(s){
+    return s.replace(/&(#[xX]?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);/g, (tam, g) => {
+      if(g.charAt(0) === '#'){
+        const onalti = g.charAt(1) === 'x' || g.charAt(1) === 'X';
+        const n = parseInt(onalti ? g.slice(2) : g.slice(1), onalti ? 16 : 10);
+        if(!Number.isFinite(n) || n <= 0 || n > 0x10FFFF) return tam;
+        try{ return String.fromCodePoint(n); }catch(e){ return tam; }
+      }
+      const v = VARLIK[g.toLowerCase()];
+      return v === undefined ? tam : v;
+    });
+  }
+  /* UTF-8 baytları Latin-1 sanılarak çözülmüş metin ("Ã¼" → "ü"). Yalnız metnin
+     TAMAMI Latin-1 aralığındaysa ve bozulma imzası varsa denenir; TextDecoder
+     fatal, çözemezse metin OLDUĞU GİBİ kalır (yanlış "onarım" yapmaktansa). */
+  function mojibakeOnar(s){
+    if(!/[\u00C2-\u00C5\u00D0][\u0080-\u00BF]/.test(s)) return s;
+    for(let i = 0; i < s.length; i++) if(s.charCodeAt(i) > 0xFF) return s;
+    try{
+      const bayt = new Uint8Array(s.length);
+      for(let i = 0; i < s.length; i++) bayt[i] = s.charCodeAt(i);
+      return new TextDecoder('utf-8', { fatal: true }).decode(bayt);
+    }catch(e){ return s; }
+  }
+  /* Onarılamaz bozukluk: U+FFFD, ya da harf ARASINDA '?' ("Bankas?", "Yay?nlar").
+     Türkçe harflerin '?' ile değiştiği bu desen kayda YAZILMAMALI — soru işareti
+     cümle sonunda ya da boşlukla ayrık olduğunda dokunulmaz. */
+  function bozukMetin(s){
+    return s.indexOf('�') >= 0 || /[A-Za-zÀ-ÿĀ-ſ]\?[A-Za-zÀ-ÿĀ-ſ]/.test(s)
+      || /[A-Za-zÀ-ÿĀ-ſ]\?(?=\s|$)/.test(s) && (s.match(/\?/g) || []).length >= 2;
+  }
+  /* İKİ KATMAN:
+     · metinCoz  — çözer ve onarır, ASLA boşaltmaz. Kullanıcının kendi yazdığı
+       metinde (form kaydı) bu kullanılır: girdiyi silmek kabul edilemez.
+     · metinTemizle — metinCoz + BOZUK KAPISI. Kaynaktan (Google/1000Kitap/OL)
+       gelen künye metninde bu kullanılır: onarılamaz bozuksa '' döner ve değer
+       YAZILMAZ. Kaan md.6'nın "yazılmadan önce çözülsün" şartı ikisinde de
+       sağlanır; fark yalnız bozuk metnin ne olacağı. */
+  function metinCoz(ham){
+    let s = String(ham == null ? '' : ham);
+    s = mojibakeOnar(s);
+    s = varlikCoz(varlikCoz(s));            // iki geçiş: "&amp;#039;" gibi çift kodlama
+    s = s.replace(/[\u00AD\u200B-\u200D\uFEFF]/g, '');
+    s = s.replace(/\s+/g, ' ').trim();
+    return s;
+  }
+  function metinTemizle(ham){
+    const s = metinCoz(ham);
+    return bozukMetin(s) ? '' : s;
+  }
+
+  /* --- Künye kıyası --- */
+  function kunyeKatla(s){
+    return katla(String(s || '')).replace(/[^a-z0-9çğıöşü]+/gi, ' ').replace(/\s+/g, ' ').trim();
+  }
+  function metinCelisir(a, b){   // ikisi de doluysa ve hiçbiri diğerini kapsamıyorsa
+    const x = kunyeKatla(a), y = kunyeKatla(b);
+    if(!x || !y) return false;
+    return x.indexOf(y) < 0 && y.indexOf(x) < 0;
+  }
+  /* ISBN kayıt grubu → dil/ülke. Yalnız çelişki YAKALAMAYA yeter kadar; listede
+     olmayan grup ÇELİŞKİ SAYILMAZ (sessiz geçer — yanlış red üretmemek için).
+     Türkiye grupları: 975, 9944, 605, 625. */
+  const ISBN_GRUP = [['9944', 'tr'], ['975', 'tr'], ['605', 'tr'], ['625', 'tr'],
+    ['963', 'hu'], ['972', 'pt'], ['977', 'ar'], ['987', 'es'],
+    ['0', 'en'], ['1', 'en'], ['2', 'fr'], ['3', 'de'], ['4', 'ja'], ['5', 'ru'],
+    ['84', 'es'], ['88', 'it'], ['90', 'nl'], ['91', 'sv']];
+  function isbnUlke(isbn){
+    const t = String(isbn || '').replace(/[^0-9Xx]/g, '');
+    if(t.length !== 13 || (t.slice(0, 3) !== '978' && t.slice(0, 3) !== '979')) return '';
+    const g = t.slice(3);
+    let en = '', dil = '';
+    for(const [onek, d] of ISBN_GRUP)
+      if(g.indexOf(onek) === 0 && onek.length > en.length){ en = onek; dil = d; }
+    return dil;
+  }
+  /* Yayınevi Türkçe mi — ülke veritabanı yok, GÜVENLİ yönde çalışır: yalnız
+     "bu yayınevi Türk" diyebildiğimizde çelişki aranır. Ters yön (Alman yayınevi
+     + Türk ISBN'i) BİLİNMEZ sayılır, red üretmez. */
+  const TR_YAYIN_IZ = ['yayin', 'yayinlari', 'yayinevi', 'yayincilik', 'kitap', 'kitabevi',
+    'kultur', 'basim', 'matbaa', 'nesriyat', 'bankasi', 'universitesi', 'edebiyat'];
+  function yayineviTurkMu(s){
+    const y = kunyeKatla(s);
+    if(!y) return false;
+    if(/[çğıöşü]/.test(String(s || ''))) return true;
+    return TR_YAYIN_IZ.some(w => y.indexOf(w) >= 0);
+  }
+  /* Beklenen dil: kaydın kendi dili, yoksa Türk yayınevi imzasından çıkarım.
+     Bulunamazsa '' — dil kapısı o kayıtta ÇALIŞMAZ (uydurma red yok). */
+  function beklenenDil(k){
+    const d = String(k.dil || '').trim().toLowerCase();
+    if(d) return d.slice(0, 2);
+    return yayineviTurkMu(k.yayinevi) ? 'tr' : '';
+  }
+  function ciltIsbn13(v){
+    const kim = (v && v.industryIdentifiers) || [];
+    const a = kim.find(x => x && x.type === 'ISBN_13');
+    const b = kim.find(x => x && x.type === 'ISBN_10');
+    return (a && a.identifier) || (b && b.identifier) || '';
+  }
+  /* İki kaynak TEK bir "cilt" biçimine indirgenir: künye artık hangi kaynaktan
+     geldiğini bilir ve alanlar TEK cilt nesnesinden okunur — karıştırma
+     yapısal olarak imkânsız hâle gelir. */
+  function ciltGB(v){
+    return { kaynak: 'Google Books', yayinevi: v.publisher || '', sayfa: v.pageCount || 0,
+      yil: parseInt(String(v.publishedDate || '').slice(0, 4)) || 0,
+      isbn: ciltIsbn13(v), dil: String(v.language || ''), yazarlar: v.authors || [],
+      kapak: (v.imageLinks && v.imageLinks.thumbnail) ? kapakTemizle(v.imageLinks.thumbnail) : '' };
+  }
+  function ciltWorker(w){
+    return { kaynak: '1000Kitap', yayinevi: w.yayinevi || '', sayfa: w.sayfa || 0,
+      yil: w.yil || 0, isbn: w.isbn || '', dil: w.dil || '',
+      yazarlar: w.yazar ? [w.yazar] : [], kapak: w.kapak || '' };
+  }
+  /* AYNI BASKI MI? Kaydın MEVCUT künyesiyle cildi karşılaştırır. Dönüş: red
+     gerekçesi (string) ya da '' (uyumlu). Yalnız İKİSİ DE dolu olan alanlar
+     kıyaslanır — eksik bilgi red sebebi DEĞİLDİR. */
+  function ciltUyumsuzlugu(k, c, isbnliSorgu){
+    if(!c) return 'aday yok';
+    if(metinCelisir(k.yayinevi, c.yayinevi))
+      return 'yayınevi çelişiyor (kayıt: ' + k.yayinevi + ' · kaynak: ' + c.yayinevi + ')';
+    if(k.sayfa > 0 && c.sayfa > 0 && Math.abs(k.sayfa - c.sayfa) > 2)
+      return 'sayfa sayısı çelişiyor (kayıt: ' + k.sayfa + ' · kaynak: ' + c.sayfa + ')';
+    const kIsbn = String(k.isbn || '').replace(/[^0-9Xx]/g, '');
+    const cIsbn = String(c.isbn || '').replace(/[^0-9Xx]/g, '');
+    if(kIsbn && cIsbn && kIsbn !== cIsbn) return 'ISBN çelişiyor (başka baskı)';
+    /* DİL (Kaan md. 4): ISBN ile sorulduysa cilt baskıya birebirdir, dil kapısı
+       gereksiz; başlıkla bulunduysa dil uymuyorsa YAZILMAZ. */
+    if(!isbnliSorgu){
+      const bek = beklenenDil(k), cd = String(c.dil || '').toLowerCase().slice(0, 2);
+      if(bek && cd && bek !== cd) return 'dil uymuyor (beklenen: ' + bek + ' · kaynak: ' + cd + ')';
+    }
+    return '';
+  }
+  /* Alan doğrulaması (Kaan md. 5). Dönüş: red gerekçesi ya da ''. */
+  function yayineviGecersiz(k, c, yayinevi){
+    const y = kunyeKatla(yayinevi);
+    if(!y) return 'yayınevi metni boş ya da bozuk';
+    if(y === kunyeKatla(k.yazar) || (c.yazarlar || []).some(a => kunyeKatla(a) === y))
+      return 'yayınevi alanına yazar adı gelmiş (' + yayinevi + ')';
+    return '';
+  }
+  function isbnGecersiz(k, isbn, yayinevi){
+    const B = window.__barkod;
+    if(B && B.isbnGecerli && !B.isbnGecerli(isbn)) return 'ISBN sağlama toplamı tutmuyor';
+    /* ISBN ülke öneki ↔ yayınevi ülkesi (Kaan md. 5). Yayınevi = aynı kaynaktan
+       gelen ya da kayıtta duran; Türk imzası varken ISBN başka gruptan ise
+       yazılmaz. Bilinmeyen grup ya da Türk olmayan yayınevi → sessiz geçer. */
+    const ulke = isbnUlke(isbn);
+    const y = yayinevi || k.yayinevi;
+    if(ulke && ulke !== 'tr' && yayineviTurkMu(y))
+      return 'ISBN ülke öneki yayıneviyle çelişiyor (ISBN: ' + ulke + ' · yayınevi: ' + y + ')';
+    return '';
+  }
   function rxKac(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
   /* Kategori listesi (geliş SIRASI korunur) → taksonomiye eşlenen İLK güvenli
      tür. Kategori başına sözlük sırayla denenir; kelime sınırı zorunlu; 'tam'
@@ -440,42 +620,57 @@
     return hepsiUyarlama ? sonuc
       : sonuc.filter(kat => !UYARLAMA_RX.test(katla(kat)));
   }
-  /* Tek kitap için bulunanlar: yalnız EKSİK alanlar sorgulanır/derlenir.
-     İstek bütçesi kitap başına ≤2 KORUNUR: dar + en çok BİR gevşek sorgu.
-     Gevşek, v63'te yalnız dar SIFIR sonuç verince atılıyordu; artık uyan
-     aday bulunamayınca da (aynı düşüş, daha erken yakalanır) ya da tür
-     hâlâ boşken (kategori kaynağını genişletmek için) atılır. */
+  /* Tek kitap için bulunanlar. v102 KAYNAK BÜTÜNLÜĞÜ:
+     · KÜNYE (isbn, yayinevi, yil, sayfa) TEK cilt nesnesinden okunur — alanlar
+       artık ayrı ayrı farklı yanıtlardan toplanamaz, karıştırma YAPISAL olarak
+       imkânsız. Cilt reddedilirse künyenin TAMAMI boş kalır.
+     · md.4 DİL ÖNCELİĞİ: kayıtta ISBN varsa künye YALNIZ `isbn:` sorgusundan
+       (ya da 1000Kitap /isbn'den) gelir — başlık aramasına DÜŞMEZ. ISBN yoksa
+       başlık adayı, kaydın mevcut künyesiyle ve diliyle DENETLENİR.
+     · md.3 İSTİSNA (Kaan kararı): tür ve kapak künye değildir — tür çok cildin
+       kategorilerinden havuzlanmaya, kapak `isbn:` sorgusundan gelmeye DEVAM
+       eder. Bilerek.
+     · Reddedilen her alan için gerekçe döner (md.5 "işaretle"); önizlemede
+       görünür, hiçbir şey sessizce boş kalmaz.
+     İstek bütçesi: ISBN'li kayıtta 1 (isbn:) + en çok 2 (tür/kapak için başlık);
+     ISBN'siz kayıtta eskisi gibi ≤2. */
+  const KUNYE = ['isbn', 'yayinevi', 'yil', 'sayfa'];
   async function kitapSorgula(k){
     const eksikler = ALANLAR.filter(a => alanBos(k, a));
     /* v74: kapak alanı DOLU görünse de OpenLibrary o ISBN'de kapak tutmuyorsa
-       (?default=false → 404) kitap kapaksız sayılır ve tazelenir. Kullanıcının
-       kütüphanesinde bu durumda 37 kitap ölçüldü; alan dolu olduğu için
-       zenginleştirmeye hiç girmiyorlardı. Tek ek istek, yalnız OpenLibrary
-       kapağı olan kitaplar için. */
+       (?default=false → 404) kitap kapaksız sayılır ve tazelenir. */
     let kapakOlu = false;
     if(eksikler.indexOf('kapak') < 0 && await olKapakOluMu(k.kapak)){
       eksikler.push('kapak'); kapakOlu = true;
     }
-    if(!eksikler.length) return null;
-    /* v74 KAYNAK SIRASI — kapak için ÖNCE isbn: sorgusu.
-       Gerekçe (ölçüm): ISBN sorgusu BASKIYA birebirdir; başlık eşleşmesi farklı
-       baskının kapağını getirebiliyor. Ölü kapaklı 37 kitapta isbn: sorgusu
-       13 kapak buldu (%35,1). İstek yalnız kapak eksikken ve ISBN varken atılır
-       (kota: kitap başına +1). Diğer alanlar mevcut ad+yazar yolundan gelir —
-       tür/sayfa/yıl mantığı DEĞİŞMEDİ. */
-    let isbnAdaylar = null;
+    /* TEKDÜZE DÖNÜŞ: her yol {b, red} verir (eksik alan yokken de) — çağıran
+       tek biçim görür,  her zaman güvenli. */
+    if(!eksikler.length) return { b: null, red: [] };
     const sIsbn = sorguIsbn(k);
-    if(eksikler.indexOf('kapak') >= 0 && sIsbn){
-      /* isbn: sorgusu bir EK yol; başarısız olması MEVCUT ad+yazar yolunu
-         ÖLDÜRMEMELİ. Google Books bu uçta aralıklı 503 veriyor (canlı koşumda
-         ölçüldü: sorgu patlayınca kitapSorgula tümden düşüyor ve daha önce
-         kapak BULUNAN kitap bile kapaksız kalıyordu — eklenen yetenek mevcut
-         yeteneği geriletmiş oluyordu). Hata yutulur, akış ad+yazar ile sürer. */
-      try{
-        isbnAdaylar = await gbSor('isbn:' + sIsbn);
-      }catch(e){ isbnAdaylar = null; }
+    const kunyeIster = KUNYE.some(a => eksikler.indexOf(a) >= 0);
+    const kapakIster = eksikler.indexOf('kapak') >= 0;
+    const red = [];
+
+    /* ---------- 1) ISBN sorgusu: künyenin ÖNCELİKLİ kaynağı + kapak ---------- */
+    let isbnAdaylar = null, kunye = null, kunyeIsbnli = false;
+    if(sIsbn && (kunyeIster || kapakIster)){
+      /* Hata YUTULUR: bu yol bir EK yetenek, düşmesi başlık yolunu öldürmemeli
+         (v74 dersi — Google bu uçta aralıklı 503 veriyor). */
+      try{ isbnAdaylar = await gbSor('isbn:' + sIsbn); }
+      catch(e){ isbnAdaylar = null; }
       await bekle(ARALIK_MS);
     }
+    if(kunyeIster && sIsbn){
+      if(isbnAdaylar && isbnAdaylar.length){ kunye = ciltGB(isbnAdaylar[0]); kunyeIsbnli = true; }
+      else{
+        const wk = await workerIsbnSessiz(sIsbn);   // 1000Kitap: Türkçe baskılarda birebir
+        if(wk){ kunye = ciltWorker(wk); kunyeIsbnli = true; }
+      }
+      if(!kunye) red.push('ISBN ile künye bulunamadı — başlık aramasına düşülmedi (baskı karışmasın)');
+    }
+
+    /* ---------- 2) Başlık araması: tür + kapak için HER ZAMAN, künye için
+                     yalnız kayıtta ISBN YOKKEN ---------- */
     const dar = 'intitle:"' + k.ad + '"' + (k.yazar ? ' inauthor:"' + k.yazar + '"' : '');
     const adaylar1 = await gbSor(dar);
     let aday = adaylar1.find(v => baslikUyar(k.ad, v.title));
@@ -485,9 +680,17 @@
       adaylar2 = await gbSor('"' + k.ad + '" ' + (k.yazar || ''));
       aday = adaylar2.find(v => baslikUyar(k.ad, v.title));
     }
-    /* TÜR: tek adayın değil, başlığı uyan TÜM adayların kategorileri
-       (geliş sırası korunur); hâlâ boşsa ve gevşek daha atılmadıysa
-       tür için gevşek de denenir — istek sınırı yine ≤2. */
+    if(kunyeIster && !sIsbn){
+      if(aday){
+        const c = ciltGB(aday);
+        const u = ciltUyumsuzlugu(k, c, false);
+        if(u) red.push(u); else kunye = c;
+      }else{
+        red.push('başlığı uyan baskı bulunamadı');
+      }
+    }
+
+    /* ---------- 3) TÜR (künye DEĞİL — çok cilt havuzu sürüyor) ---------- */
     let tur = '';
     if(eksikler.indexOf('tur') >= 0){
       tur = turCevir(kategoriTopla(adaylar1, k.ad)
@@ -498,61 +701,37 @@
         tur = turCevir(kategoriTopla(adaylar2, k.ad));
       }
     }
-    /* Başlık eşleşmesi tutmasa bile ISBN'den gelen kapak KAYBOLMAZ: isbn:
-       sorgusu baskıya birebir olduğu için başlık doğrulamasına ihtiyaç duymaz.
-       (Ölü kapaklı kitapların bir kısmında başlık eşleşmesi tutmuyor.) */
-    const isbnKapak = kapakAdayBul(isbnAdaylar);
-    if(!aday){
-      /* v97 — Google başlık eşleşmesi BOŞ ve kitabın ISBN'i varsa 1000Kitap
-         yedeği (worker /isbn; barkod.js ile aynı uç). Google'ın bulduğu aday
-         ASLA ezilmez: bu dala yalnız aday yokken girilir. Yalnız EKSİK alanlar
-         dolar; TÜR bu yoldan YAZILMAZ (taksonomi eşlemesi yok — uydurma yok).
-         ISBN sorgusu baskıya birebir → başlık doğrulaması istemez (v74 isbn:
-         kapak kararının aynısı; Türkçe adı farklı kayıtlarda başlık kıyası
-         yanlış RED üretirdi). Worker'a ulaşılamazsa sessiz: eski davranış
-         (isbn: kapağı ya da null). */
-      const wk = sIsbn ? await workerIsbnSessiz(sIsbn) : null;
-      const bulunanW = {};
-      if(wk){
-        if(eksikler.indexOf('isbn') >= 0 && wk.isbn) bulunanW.isbn = wk.isbn;
-        if(eksikler.indexOf('sayfa') >= 0 && wk.sayfa > 0) bulunanW.sayfa = wk.sayfa;
-        if(eksikler.indexOf('yayinevi') >= 0 && wk.yayinevi) bulunanW.yayinevi = String(wk.yayinevi);
-        if(eksikler.indexOf('yil') >= 0 && wk.yil > 1400 && wk.yil <= new Date().getFullYear() + 1) bulunanW.yil = wk.yil;
-      }
-      if(eksikler.indexOf('kapak') >= 0){
-        const kpk = isbnKapak || (wk && wk.kapak) || '';
-        if(kpk){ bulunanW.kapak = kpk; if(kapakOlu) bulunanW.__kapakOlu = true; }
-      }
-      return Object.keys(bulunanW).length ? bulunanW : null;
-    }
-    const kimlik = aday.industryIdentifiers || [];
-    const i13 = kimlik.find(x => x && x.type === 'ISBN_13');
-    const i10 = kimlik.find(x => x && x.type === 'ISBN_10');
+
+    /* ---------- 4) Yazım: künye TEK cilttan, doğrulama kapılarıyla ---------- */
     const bulunan = {};
     if(tur) bulunan.tur = tur;
-    if(eksikler.indexOf('isbn') >= 0){
-      const ham = (i13 && i13.identifier) || (i10 && i10.identifier) || '';
-      const B = window.__barkod;
-      /* checksum'dan geçmeyen ISBN yazılmaz (barkod.js doğrulayıcısı) */
-      if(ham && (!B || !B.isbnGecerli || B.isbnGecerli(ham))) bulunan.isbn = B && B.isbnTemizle ? B.isbnTemizle(ham) : ham;
+    if(kunye){
+      if(eksikler.indexOf('isbn') >= 0 && kunye.isbn){
+        const B = window.__barkod;
+        const temiz = (B && B.isbnTemizle) ? B.isbnTemizle(kunye.isbn) : String(kunye.isbn);
+        const g = isbnGecersiz(k, temiz, kunye.yayinevi);
+        if(g) red.push(g); else bulunan.isbn = temiz;
+      }
+      if(eksikler.indexOf('yayinevi') >= 0 && kunye.yayinevi){
+        const temiz = metinTemizle(kunye.yayinevi);
+        const g = yayineviGecersiz(k, kunye, temiz);
+        if(g) red.push(g); else bulunan.yayinevi = temiz;
+      }
+      if(eksikler.indexOf('sayfa') >= 0 && kunye.sayfa > 0) bulunan.sayfa = kunye.sayfa;
+      if(eksikler.indexOf('yil') >= 0 && kunye.yil > 1400 && kunye.yil <= new Date().getFullYear() + 1)
+        bulunan.yil = kunye.yil;
+      if(KUNYE.some(a => bulunan[a] !== undefined)) bulunan.__kaynak = kunye.kaynak;
     }
-    if(eksikler.indexOf('sayfa') >= 0 && aday.pageCount > 0) bulunan.sayfa = aday.pageCount;
-    if(eksikler.indexOf('yayinevi') >= 0 && aday.publisher) bulunan.yayinevi = String(aday.publisher);
-    if(eksikler.indexOf('yil') >= 0 && aday.publishedDate){
-      const y = parseInt(String(aday.publishedDate).slice(0, 4));
-      if(y > 1400 && y <= new Date().getFullYear() + 1) bulunan.yil = y;
-    }
-    /* Kapak: isbn: sonucu öncelikli, yoksa başlık-eşleşen aday. İkisi de yoksa
-       alan BOŞ KALIR — uydurma kapak yazılmaz. OpenLibrary'ye "son çare" olarak
-       DÖNÜLMEZ (karar): tazelenen kapakların 37'si zaten OpenLibrary'nin
-       kapağı olmayan ISBN'leri; doğrulanmamış bir URL yazmak aynı ölü-kapak
-       kusurunu yeniden üretirdi. */
-    if(eksikler.indexOf('kapak') >= 0){
-      const kpk = isbnKapak || (aday.imageLinks && aday.imageLinks.thumbnail
-        ? kapakTemizle(aday.imageLinks.thumbnail) : '');
+    /* KAPAK (künye DEĞİL — Kaan istisnası): `isbn:` sonucu öncelikli, yoksa
+       başlık-eşleşen aday. İkisi de yoksa alan BOŞ kalır, uydurma kapak yok. */
+    if(kapakIster){
+      const kpk = kapakAdayBul(isbnAdaylar)
+        || (aday && aday.imageLinks && aday.imageLinks.thumbnail ? kapakTemizle(aday.imageLinks.thumbnail) : '')
+        || (kunye && !kunyeIsbnli ? '' : (kunye && kunye.kapak) || '');
       if(kpk){ bulunan.kapak = kpk; if(kapakOlu) bulunan.__kapakOlu = true; }
     }
-    return Object.keys(bulunan).length ? bulunan : null;
+    const gercek = ALANLAR.some(a => bulunan[a] !== undefined);
+    return { b: gercek ? bulunan : null, red: red };
   }
 
   /* ---------- OTOMATİK TÜR (v65): yeni eklenen kitaba kayıt anında ----------
@@ -1971,8 +2150,9 @@
     let kdurum = kuyrukYukle();
     if(!kdurum || kdurum.bitti){
       kdurum = { sira: (veri.kitaplar || []).filter(k => ALANLAR.some(a => alanBos(k, a))).map(k => k.id),
-        islenen: {}, bulunan: {}, hata: {}, bitti: false };
+        islenen: {}, bulunan: {}, red: {}, hata: {}, bitti: false };
     }
+    if(!kdurum.red) kdurum.red = {};   // v102 öncesi yarım kalmış kuyruk durumu
     kuyrukKaydet(kdurum);
     calisiyor = true; durdur = false;
     ortuKur('zgTarama', 'Kütüphaneyi zenginleştir');
@@ -1990,8 +2170,12 @@
         const k = (veri.kitaplar || []).find(x => x.id === id);
         if(k){
           try{
-            const b = await kitapSorgula(k);
-            if(b) kdurum.bulunan[id] = b;
+            /* v102: dönüş {b, red} — red = kaynak bütünlüğü / doğrulama
+               kapılarının reddettiği alanların gerekçeleri (md.5 "işaretle"),
+               önizlemede görünür; hiçbir alan sessizce boş kalmaz. */
+            const s = await kitapSorgula(k);
+            if(s && s.b) kdurum.bulunan[id] = s.b;
+            if(s && s.red && s.red.length) kdurum.red[id] = s.red;
             ardArdaHata = 0;
           }catch(e){
             kdurum.hata[id] = 1;
@@ -2101,6 +2285,26 @@
       '<div class="form-alt"><button class="btn btn-cerceve" data-act="zg-durdur" style="flex:1">' +
         (calisiyor ? 'Duraklat' : 'Kapat') + '</button></div>';
   }
+  /* v102: kaynak bütünlüğü / doğrulama kapılarının REDDETTİĞİ alanlar.
+     "Sessizce boş kalma" kusurunun panzehiri: hangi kitapta neyin neden
+     yazılmadığı önizlemede yazılı durur. */
+  function redBlokHtml(kdurum){
+    const girisler = Object.entries(kdurum.red || {});
+    if(!girisler.length) return '';
+    const satirlar = girisler.map(([id, nedenler]) => {
+      const k = (veri.kitaplar || []).find(x => x.id === id);
+      if(!k) return '';
+      return '<div class="zg-red-satir"><span class="zg-onizle-ad">' + esc(k.ad) + '</span>' +
+        '<span class="zg-onizle-alan">' + nedenler.map(n => esc(n)).join(' · ') + '</span></div>';
+    }).filter(Boolean).join('');
+    if(!satirlar) return '';
+    /* KENDİ sınıfı (zg-red-katla) — mevcut .zg-katla'yı yeniden kullanmak
+       testlerin genel ".zg-katla summary" seçicisini gölgeliyordu (projenin
+       "yeni UI = yeni önek" kuralı; g53 kırmızısıyla yakalandı). */
+    return '<details class="zg-red-katla"><summary>Yazılmayan alanlar (' + girisler.length +
+      ' kitap) — kaynak kaydın baskısı tutmadı</summary><div class="zg-red-liste">' +
+      satirlar + '</div></details>';
+  }
   function onizlemeCiz(kdurum){
     const g = document.getElementById('zgTaramaGovde');
     if(!g) return;
@@ -2112,6 +2316,7 @@
       g.innerHTML = '<div class="zg-satir">' + islenen + ' / ' + toplam + ' kitap tarandı' +
         (kdurum.bitti ? ' — yazılacak yeni bilgi bulunamadı' : ' (yarım — devam edebilirsin)') +
         (hataN ? ' · ' + hataN + ' kitapta kaynak hatası' : '') + '.</div>' +
+        redBlokHtml(kdurum) +
         '<div class="form-alt">' +
         (kdurum.bitti ? '' : '<button class="btn btn-cerceve" data-act="zg-tara" style="flex:1">Devam et</button>') +
         '<button class="btn btn-cerceve" data-act="zg-kapat" data-ortu="zgTarama" style="flex:1">Kapat</button></div>';
@@ -2136,6 +2341,7 @@
         (kdurum.bitti ? '' : ' (yarım — devam edebilirsin)') +
         (hataN ? ' · ' + hataN + ' kitapta kaynak hatası' : '') + '</div>' +
       '<div class="zg-ozet">' + kitapSayi + ' kitapta yeni bilgi: ' + ozetler + '</div>' +
+      redBlokHtml(kdurum) +
       '<p class="zg-not">Yalnız BOŞ alanlar doldurulur; elle girdiğin hiçbir değere dokunulmaz. ' +
         'Tür, 1000Kitap taksonomisine eşlenemezse boş bırakılır — uydurma tür yazılmaz.</p>' +
       '<details class="zg-katla"><summary>Tek tek gör (' + kitapSayi + ' kitap)</summary>' +
@@ -2487,6 +2693,11 @@
     '.ky-geri .btn{margin-top:8px}',
     '.ky-geri[hidden]{display:none}',
     '.zg-katla{margin-top:12px;border:1px solid var(--kontur);border-radius:var(--r-md)}',
+    '.zg-red-katla{margin-top:12px;border:1px solid var(--kontur);border-radius:var(--r-md)}',
+    '.zg-red-katla summary{list-style:none;cursor:pointer;padding:10px 14px;font-size:.85rem;color:var(--muted)}',
+    '.zg-red-katla summary::-webkit-details-marker{display:none}',
+    '.zg-red-liste{padding:0 14px 10px;max-height:40vh;overflow-y:auto}',
+    '.zg-red-satir{padding:9px 0;border-bottom:1px solid var(--cizgi)}',
     '.zg-katla summary{list-style:none;cursor:pointer;padding:10px 14px;font-size:.85rem;color:var(--muted)}',
     '.zg-katla summary::-webkit-details-marker{display:none}',
     '.zg-onizle-liste{padding:0 14px 10px;max-height:44vh;overflow-y:auto}',
@@ -2645,7 +2856,14 @@
     kuyrukYukle, kuyrukKaydet, kuyrukTemizle, puanlanacaklar, tarihsizler, durumTazele,
     otoTur, otoAdaylar, atananGecerli, taksonomiKur: t => { taksonomi = t; },
     redAktif, redListesi,   // v91: geri alma defteri
-    ARALIK_MS, ALANLAR, KUYRUK_ANAHTAR, OTO_DENEME_ANAHTAR, OTO_ATANAN_ANAHTAR };
+    /* v102 kaynak bütünlüğü + metin temizliği. metinTemizle TEK giriş
+       noktasıdır: kaynaktan gelen künye metnini yazan HER yol (zengin.js,
+       barkod.js, arama→kayıt, form kaydı) bunu çağırır — mevcut bir kayıt da
+       elle kaydedildiğinde aynı yoldan geçip temizlenir. */
+    metinTemizle, metinCoz, varlikCoz, mojibakeOnar, bozukMetin,
+    ciltGB, ciltWorker, ciltUyumsuzlugu, yayineviGecersiz, isbnGecersiz,
+    isbnUlke, yayineviTurkMu, beklenenDil, kunyeKatla, metinCelisir,
+    ARALIK_MS, ALANLAR, KUNYE, KUYRUK_ANAHTAR, OTO_DENEME_ANAHTAR, OTO_ATANAN_ANAHTAR };
   /* v100: kütüphane dosyası (tam değiştirme) test kancaları — hiçbiri yazmaz */
   window.__ky = { dogrula: kyDogrula, planKur: kyPlanKur, iz: kyIz, anlikOku: kyAnlikOku,
     ozetGirisleri: kyOzetGirisleri, DB_AD: KY_DB_AD, MAGAZA: KY_MAGAZA, ANAHTAR: KY_ANAHTAR };

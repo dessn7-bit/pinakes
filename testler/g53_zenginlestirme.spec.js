@@ -186,7 +186,7 @@ test.describe('G53 M1 — sayım, tarama, önizleme, uygulama', () => {
     ]);
     const b = await page.evaluate(async (TURLER) => {
       window.__zengin.taksonomiKur(TURLER);
-      return await window.__zengin.kitapSorgula(veri.kitaplar.find(k => k.ad === 'Dolu Kitap'));
+      return (await window.__zengin.kitapSorgula(veri.kitaplar.find(k => k.ad === 'Dolu Kitap'))).b;   // v102: {b, red}
     }, TURLER);
     expect(b.tur).toBe('Biyografi');   // uymayan adayın Drama'sı DEĞİL, uyan adayın türü
   });

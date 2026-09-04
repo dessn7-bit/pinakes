@@ -159,8 +159,8 @@ test.describe('G74 M2 — kapak tazeleme', () => {
       return r.fulfill({ status: 200, contentType: 'application/json',
         body: JSON.stringify(gbKapakYanit('https://books.google.com/books/content?id=BULUNDU')) });
     });
-    const b = await page.evaluate(() => window.__zengin.kitapSorgula(
-      { ad: 'Kapak Kitabı', yazar: 'Kapak Yazar', isbn: '9786053609902', kapak: '' }));
+    const b = await page.evaluate(async () => (await window.__zengin.kitapSorgula(
+      { ad: 'Kapak Kitabı', yazar: 'Kapak Yazar', isbn: '9786053609902', kapak: '' })).b);
     expect(b && b.kapak).toBeTruthy();
     expect(b.kapak).toContain('id=BULUNDU');
     // kaynak sırası: ISBN varken isbn: sorgusu atılmalı (baskıya birebir)
@@ -182,8 +182,8 @@ test.describe('G74 M2 — kapak tazeleme', () => {
     await page.route(u => u.href.includes('googleapis.com/books'), r => r.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify(gbKapakYanit('http://books.google.com/books/content?id=A&edge=curl&zoom=1')) }));
-    const b = await page.evaluate(() => window.__zengin.kitapSorgula(
-      { ad: 'Kapak Kitabı', yazar: 'Kapak Yazar', isbn: '9786053609902', kapak: '' }));
+    const b = await page.evaluate(async () => (await window.__zengin.kitapSorgula(
+      { ad: 'Kapak Kitabı', yazar: 'Kapak Yazar', isbn: '9786053609902', kapak: '' })).b);
     expect(b && b.kapak).toBeTruthy();
     expect(b.kapak.startsWith('https://'), 'http:// https\'e çevrildi').toBe(true);
     expect(b.kapak).not.toContain('edge=curl');
@@ -197,9 +197,9 @@ test.describe('G74 M2 — kapak tazeleme', () => {
     await page.route(u => u.href.includes('googleapis.com/books'), r => r.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify(gbKapakYanit('https://books.google.com/books/content?id=YENI')) }));
-    const b = await page.evaluate(() => window.__zengin.kitapSorgula(
+    const b = await page.evaluate(async () => (await window.__zengin.kitapSorgula(
       { ad: 'Ölü Kapaklı', yazar: '', isbn: '9786053609902',
-        kapak: 'https://covers.openlibrary.org/b/isbn/9789999999999-M.jpg' }));
+        kapak: 'https://covers.openlibrary.org/b/isbn/9789999999999-M.jpg' })).b);
     expect(b && b.kapak, 'ölü kapak tazelenmeli').toBeTruthy();
     expect(b.kapak).toContain('id=YENI');
   });
@@ -244,9 +244,9 @@ test.describe('G74 M2 — kapak tazeleme', () => {
       return r.fulfill({ status: 200, contentType: 'application/json',
         body: JSON.stringify(gbKapakYanit('https://books.google.com/books/content?id=URLISBN')) });
     });
-    const b = await page.evaluate(() => window.__zengin.kitapSorgula(
+    const b = await page.evaluate(async () => (await window.__zengin.kitapSorgula(
       { ad: 'URL ISBN', yazar: '', isbn: '',
-        kapak: 'https://covers.openlibrary.org/b/isbn/9789999999999-M.jpg' }));
+        kapak: 'https://covers.openlibrary.org/b/isbn/9789999999999-M.jpg' })).b);
     expect(sorgular.some(u => u.includes('q=isbn:9789999999999')),
       'ISBN kapak URL\'sinden okunup sorgulandı').toBe(true);
     expect(b && b.kapak).toContain('id=URLISBN');
@@ -273,9 +273,9 @@ test.describe('G74 M2 — kapak tazeleme', () => {
           title: 'Dayanikli', authors: ['Yazar'],
           imageLinks: { thumbnail: 'https://books.google.com/books/content?id=ADYAZAR' } } }] }) });
     });
-    const b = await page.evaluate(() => window.__zengin.kitapSorgula(
+    const b = await page.evaluate(async () => (await window.__zengin.kitapSorgula(
       { ad: 'Dayanikli', yazar: 'Yazar', isbn: '',
-        kapak: 'https://covers.openlibrary.org/b/isbn/9789999999999-M.jpg' }));
+        kapak: 'https://covers.openlibrary.org/b/isbn/9789999999999-M.jpg' })).b);
     expect(b && b.kapak, 'isbn: patlasa da ad+yazar yolu çalışmalı').toBeTruthy();
     expect(b.kapak).toContain('id=ADYAZAR');
   });
@@ -287,9 +287,9 @@ test.describe('G74 M2 — kapak tazeleme', () => {
     await page.route(u => u.href.includes('googleapis.com/books'), r => r.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify(gbKapakYanit('https://books.google.com/books/content?id=YENI')) }));
-    const b = await page.evaluate(() => window.__zengin.kitapSorgula(
+    const b = await page.evaluate(async () => (await window.__zengin.kitapSorgula(
       { ad: 'Ağ Hatalı', yazar: '', isbn: '9786053609902', tur: 'Roman', sayfa: 1, yil: 2000,
-        yayinevi: 'X', kapak: 'https://covers.openlibrary.org/b/isbn/9789999999999-M.jpg' }));
+        yayinevi: 'X', kapak: 'https://covers.openlibrary.org/b/isbn/9789999999999-M.jpg' })).b);
     expect(b, 'ağ hatasında geçerli kapak ezilmemeli').toBeNull();
   });
 
@@ -299,8 +299,8 @@ test.describe('G74 M2 — kapak tazeleme', () => {
     await page.route(u => u.href.includes('googleapis.com/books'), r => r.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify({ totalItems: 0, items: [] }) }));
-    const b = await page.evaluate(() => window.__zengin.kitapSorgula(
-      { ad: 'Bulunamaz', yazar: '', isbn: '9786053609902', kapak: '' }));
+    const b = await page.evaluate(async () => (await window.__zengin.kitapSorgula(
+      { ad: 'Bulunamaz', yazar: '', isbn: '9786053609902', kapak: '' })).b);
     expect(b === null || !b.kapak, 'kapak uydurulmadı').toBe(true);
   });
 });

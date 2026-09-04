@@ -168,7 +168,9 @@ test.describe('G93 barkod: Google boşsa 1000Kitap yedeği', () => {
     await expect(page.locator('#toast')).toContainText("1000Kitap'tan okundu: İon");
   });
 
-  test('Open Library yarım kayıt: 1000Kitap künyesi ÖNE alınır, OL boşlukları doldurur', async ({ page }) => {
+  /* v102: "OL boşlukları doldurur" kısmı KALKTI (kaynak bütünlüğü). 1000Kitap
+     künyesinin ÖNE alınması — yani kaynak önceliği — aynen sınanıyor. */
+  test('Open Library yarım kayıt: 1000Kitap künyesi SEÇİLİR, OL ile BİRLEŞTİRİLMEZ', async ({ page }) => {
     await kameraYok(page);
     await rafAc(page);
     page.__agAyar.olKitap = { ['ISBN:' + ISBN_ION]: { title: 'Ion [TURKISH EDITION]', publish_date: '2019' } };
@@ -177,7 +179,7 @@ test.describe('G93 barkod: Google boşsa 1000Kitap yedeği', () => {
     await elleOkut(page, ISBN_ION);
     await expect(page.locator('#f-ad')).toHaveValue('İon');                       // künye önde
     await expect(page.locator('#f-yayinevi')).toHaveValue('Mitos-Boyut Yayınları');
-    await expect(page.locator('#f-yil')).toHaveValue('2019');                     // OL boşluğu doldurdu
+    await expect(page.locator('#f-yil')).toHaveValue('');   // v102: OL'nin yılı künyeye EKLENMEZ
     await expect(page.locator('#toast')).toContainText("1000Kitap'tan okundu: İon");
   });
 });
@@ -369,16 +371,25 @@ temel.describe('G93 worker /isbn', () => {
 temel.describe('G93 kaynak kilitleri', () => {
   temel('barkod.js: worker yalnız Google boşken; Google sonucu ezilmez; sw v97', async () => {
     const b = fs.readFileSync(path.join(KOK, 'barkod.js'), 'utf8');
-    const i = b.indexOf('const gbBulundu = !!(sonuc && sonuc.ad)');
+    /* v102: değişken adı gbSonuc oldu (her kaynak kendi kaydını üretir,
+       birleştirme yok) — KİLİDİN NİYETİ aynı: worker YALNIZ Google boşken. */
+    const i = b.indexOf('const gbBulundu = !!(gbSonuc && gbSonuc.ad)');
     const j = b.indexOf('if(!gbBulundu){');
     const w = b.indexOf('await workerIsbn(t)');
     expect(i).toBeGreaterThan(0);
     expect(j).toBeGreaterThan(i);
     expect(w).toBeGreaterThan(j);                      // worker çağrısı gbBulundu kapısının İÇİNDE
+    // v102: alan-alan geri doldurma deseni KALMADI
+    expect(b).not.toMatch(/if\(!sonuc\[k\] && ol\[k\]\) sonuc\[k\] = ol\[k\]/);
+    expect(b).toContain('sonuc = gbSonuc || wkSonuc || olSonuc || null;');
     expect(b).toContain("bildir(kaynakOkundu(k.kaynak, kaynakMetni) + ': ' + k.ad)");
     const z = fs.readFileSync(path.join(KOK, 'zengin.js'), 'utf8');
     expect(z).toContain('workerIsbnSessiz(sIsbn)');
-    expect(z.indexOf('workerIsbnSessiz(sIsbn)')).toBeGreaterThan(z.indexOf('if(!aday){'));   // yalnız aday yokken
+    /* v102: worker artık ISBN-ÖNCELİKLİ dalın yedeği —  sorgusu boş
+       dönerse çağrılır (baskıya birebir kalır). Kilit yeni yapıya taşındı;
+       niyet aynı: worker BİRİNCİL kaynak değil, yedek. */
+    expect(z.indexOf('workerIsbnSessiz(sIsbn)'))
+      .toBeGreaterThan(z.indexOf('if(isbnAdaylar && isbnAdaylar.length)'));
     const sw = fs.readFileSync(path.join(KOK, 'sw.js'), 'utf8');
     /* g91 deseni: sürüm KAYNAKTAN okunur, sabit anahtar her bump'ta kırılırdı */
     const swN = Number((sw.match(/const CACHE = ONEK \+ '-v(\d+)'/) || [])[1]);

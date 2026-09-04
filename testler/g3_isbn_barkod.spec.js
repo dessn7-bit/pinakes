@@ -47,7 +47,12 @@ test.describe('G3 ISBN / barkod', () => {
     await expect(page.locator('#barkodOrtu')).not.toHaveClass(/acik/); // panel kapandı
   });
 
-  test('Google + OpenLibrary birleşimi: eksik yayınevi OL\'den tamamlanır', async ({ page }) => {
+  /* v102 KAYNAK BÜTÜNLÜĞÜ: bu vaka eskiden OL'nin Google kaydındaki BOŞ
+     yayınevini doldurmasını kilitliyordu. Kaan'ın kuralı bunu kaldırdı —
+     künye alanları TEK kaynaktan gelir, kaynak boş bırakıyorsa alan BOŞ kalır.
+     Vakanın NİYETİ (kaynak önceliği: Google bulduysa Google kazanır) korundu;
+     kilitlenen davranış tersine çevrildi. */
+  test('kaynak bütünlüğü: Google kaydının boş yayınevini OL DOLDURMAZ', async ({ page }) => {
     await kameraYok(page);
     await rafAc(page);
     page.__agAyar.google = gbIsbnYanit({ ad: 'Yayınevsiz Kitap', yazar: 'Bir Yazar', yayinevi: '' });
@@ -59,7 +64,8 @@ test.describe('G3 ISBN / barkod', () => {
     await page.fill('#barkodElle', GECERLI_13);
     await page.click('[data-act="barkod-elle"]');
     await expect(page.locator('#f-ad')).toHaveValue('Yayınevsiz Kitap');
-    await expect(page.locator('#f-yayinevi')).toHaveValue('Can Yayınları'); // OL tamamladı
+    await expect(page.locator('#f-yayinevi')).toHaveValue('');   // OL'den DOLDURULMAZ
+    await expect(page.locator('#f-sayfa')).toHaveValue('');      // OL sayfası da geçmez
   });
 
   test('bulunamayan ISBN\'de uyarı çıkar, form bozulmaz', async ({ page }) => {

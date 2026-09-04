@@ -3050,15 +3050,23 @@ function formKaydet(){
   const ikiz = isbn ? veri.kitaplar.find(k => k.isbn === isbn && k.id !== durum.formDuzenId) : null;
   const ikizUyari = ikiz ? ' — dikkat: "' + ikiz.ad + '" aynı ISBN ile zaten kayıtlı' : '';
 
+  /* v102 METİN TEMİZLİĞİ — TEK BOĞAZ NOKTASI. Kayda giren her metin buradan
+     geçer: aramadan/barkoddan gelen aday da forma yazılıp buradan kaydedilir,
+     MEVCUT bir kayıt elle düzeltilip kaydedildiğinde de aynı yoldan geçer.
+     metinCoz kullanılır (metinTemizle DEĞİL): kullanıcının yazdığı metin
+     "bozuk" sayılıp SİLİNEMEZ — bozuk kapısı yalnız kaynak verisine uygulanır.
+     Eklenti yüklenmemişse kimlik işlevi: davranış eskisi gibi kalır. */
+  const TZ = (window.__zengin && window.__zengin.metinCoz)
+    || (x => String(x == null ? '' : x).replace(/\s+/g, ' ').trim());
   const ortak = {
-    ad, adTr: document.getElementById('f-adtr').value.trim(),
-    yazar: document.getElementById('f-yazar').value.trim(),
-    yayinevi: document.getElementById('f-yayinevi').value.trim(),
+    ad: TZ(ad), adTr: TZ(document.getElementById('f-adtr').value),
+    yazar: TZ(document.getElementById('f-yazar').value),
+    yayinevi: TZ(document.getElementById('f-yayinevi').value),
     yil: parseInt(document.getElementById('f-yil').value) || null,
     sayfa, tur: document.getElementById('f-tur').value.trim(),
-    cevirmen: document.getElementById('f-cevirmen').value.trim(),
+    cevirmen: TZ(document.getElementById('f-cevirmen').value),
     dil: document.getElementById('f-dil').value.trim().toLowerCase(),
-    seri: document.getElementById('f-seri').value.trim(),
+    seri: TZ(document.getElementById('f-seri').value),
     ciltNo: parseInt(document.getElementById('f-cilt').value) || null,
     isbn, sahiplik: document.getElementById('f-sahiplik').value === 'istek' ? 'istek' : 'sahip',
     durum: durum.formDurum,
