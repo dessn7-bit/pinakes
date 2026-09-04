@@ -676,13 +676,23 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
 .d-sessiz{font-size:.8rem;color:var(--muted);padding:10px 10px;border-radius:var(--r-ic);
   text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--muted2)}
 /* ÖZET bölümü (M2, oz- ad alanı — d-ghost/d-sessiz reçeteleri kopya, sınıf
-   yeniden kullanılmaz kuralı). Metin: düz serif, KUTUSUZ, italiksiz (italik =
-   alıntı imzası); pre-wrap satır sonlarını korur. */
+   yeniden kullanılmaz kuralı). Metin: düz serif, KUTUSUZ.
+   v101: oz-metin/onto-metin artık mdMini'den geçiyor — satır sonu <br>,
+   paragraf <p>. pre-wrap bu ikisinden KALKTI: kaçırılmış satır sonu hem <br>
+   hem pre-wrap ile iki kez sayılırdı. ts-govde (taslak önizlemesi) ham metni
+   esc ile bastığı için pre-wrap'i KORUR — ayrı kural.
+   İTALİK AYRIMI: blok italiği hâlâ alıntı imzasıdır; buradaki <em> yazarın
+   kendi *…* işaretinden gelen SATIR İÇİ vurgudur, o dili bozmaz. */
 .oz-bos,.onto-bos{padding-top:2px}
 .oz-ghost,.onto-ghost,.ts-ghost{background:none;border:none;color:var(--brass);font-family:var(--sans);
   font-size:.72rem;font-weight:600;letter-spacing:.06em;padding:0;position:relative}
 .oz-ghost::after,.onto-ghost::after,.ts-ghost::after{content:'';position:absolute;inset:-8px}
-.oz-metin,.onto-metin,.ts-govde{white-space:pre-wrap;line-height:1.62;font-size:.95rem;overflow-wrap:anywhere}
+.oz-metin,.onto-metin,.ts-govde{line-height:1.62;font-size:.95rem;overflow-wrap:anywhere}
+.ts-govde{white-space:pre-wrap}
+.oz-metin p,.onto-metin p{margin:0 0 .95em}
+.oz-metin p:last-child,.onto-metin p:last-child{margin-bottom:0}
+.oz-metin strong,.onto-metin strong{font-weight:600}   /* Lora'da 700 yüzü yok; 600 = uygulamanın vurgu ağırlığı */
+.oz-metin em,.onto-metin em{font-style:italic}
 .oz-eylem,.onto-eylem,.ts-eylem{display:flex;gap:16px;align-items:center;margin-top:10px}
 .ts-eylem{flex-wrap:wrap}   /* üç düğme dar ekranda alta kıvrılır; oz/onto ikilisi etkilenmez */
 .oz-sessiz,.onto-sessiz,.ts-sessiz{background:none;border:none;font-size:.8rem;color:var(--muted);padding:0;
@@ -2291,6 +2301,38 @@ function iKatla(s){
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function escAttr(s){ return esc(s); }
+/* ---------- MİNİ MARKDOWN (v101) ----------
+   Özet ve ontoloji metinleri markdown kalın işaretiyle yazılmış (gerçek veride
+   243 kayıttan 185'inde **…**, 2487 kullanım; ayrıca 3 gerçek *italik* — Percy
+   Jackson'da öykü adları). Ham görünüyorlardı. Burada YALNIZ ÜÇ öğe işlenir:
+     **kalın** · *italik* · boş satır = paragraf
+   BAŞKA HİÇBİR ŞEY (başlık, madde, bağlantı, kod, tablo, alt-çizgi vurgu)
+   İŞLENMEZ — KARAR: bu metinlerde hiçbiri yok (ölçüldü: # 0, [](): 0, ` 0,
+   | 0, _…_ 0 kayıt); ileride kazara girerse HAM görünmeleri sessizce
+   biçimlenmelerinden güvenli. Kütüphane de eklenmez: üç öğe için bağımlılık
+   gereksiz ağırlık.
+   GÜVENLİK: metin kullanıcının içe aktardığı dosyadan gelir, GÜVENİLMEZDİR.
+   Sıra ŞART — ÖNCE esc() (HTML kaçışı), SONRA yıldız dönüşümü. Ham metin
+   innerHTML'e hiç girmez; dönüşüm yalnız kaçırılmış metin üzerinde çalışır ve
+   ürettiği tek etiketler <p>/<br>/<strong>/<em>. esc() yıldıza dokunmaz, bu
+   yüzden kaçış dönüşümü bozmaz.
+   SIRA 2: kalın ÖNCE, italik SONRA — tersi olsaydı tek-yıldız kuralı
+   **kalın**ın yıldızlarını yerdi (ilk * ile ikinci * arasını italik sanardı).
+   Kalın <strong>'a döndükten sonra ortada ** kalmaz.
+   EŞLEŞME KAPISI: yıldızın hemen içi boşluk OLAMAZ (`a * b * c` çarpma gibi
+   metinler italiğe dönmesin); kapanmayan yıldız olduğu gibi kalır.
+   Lookbehind KULLANILMAZ — eski Safari'de sözdizimi hatası tüm betiği
+   düşürürdü; kapılar alternasyonla kuruldu. */
+function mdMini(ham){
+  const g = esc(String(ham ?? '')).replace(/\r\n?/g, '\n');
+  const vurgu = p => p
+    .replace(/\*\*([^\s*][^*]*?[^\s*]|[^\s*])\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^\s*][^*\n]*?[^\s*]|[^\s*])\*/g, '<em>$1</em>')
+    .replace(/\n/g, '<br>');
+  return g.split(/\n(?:[ \t]*\n)+/)          // bir ya da daha çok BOŞ satır = tek paragraf ayracı
+    .map(p => p.trim()).filter(Boolean)
+    .map(p => '<p>' + vurgu(p) + '</p>').join('');
+}
 /* ---------- Tür GÖRÜNEN adı (v91) ----------
    k.tur değeri 1000Kitap taksonomisinin KENDİ adıdır ve öyle kalır: otomatik
    tür motoru, içe aktarım taksonomi kapısı, Keşfet tür rafı ve yerleşik liste
@@ -3123,7 +3165,7 @@ function metinBolumHtml(k){
     return `<div class="detay-satir" id="dOzetBlok">
       <div class="d-bolum-bas"><span class="kicker">Özetin</span>
         <button class="oz-ghost" data-act="oz-ac">Düzenle</button></div>
-      <div class="oz-metin">${esc(ozM)}</div>
+      <div class="oz-metin">${mdMini(ozM)}</div>
     </div>
     <div class="detay-satir onto-bos"><button class="onto-ghost" data-act="onto-ac">+ Ontoloji yaz</button></div>`;
   }
@@ -3141,11 +3183,11 @@ function metinBolumHtml(k){
   if(sekme === 'ozet'){
     panel = ozDuzen ? ozEditor()
       : ozYukleniyor ? '<div class="oz-metin" style="color:var(--muted)">Özet yükleniyor…</div>'
-      : ozM ? `<div class="oz-metin">${esc(ozM)}</div>`
+      : ozM ? `<div class="oz-metin">${mdMini(ozM)}</div>`
       : '<button class="oz-ghost" data-act="oz-ac">+ Özetini yaz</button>';
     if(!ozDuzen && ozM) duzenle = '<button class="oz-ghost" data-act="oz-ac">Düzenle</button>';
   }else{
-    panel = onDuzen ? onEditor() : `<div class="onto-metin">${esc(onM)}</div>`;
+    panel = onDuzen ? onEditor() : `<div class="onto-metin">${mdMini(onM)}</div>`;
     if(!onDuzen) duzenle = '<button class="onto-ghost" data-act="onto-ac">Düzenle</button>';
   }
   return `<div class="detay-satir" id="dMetinBlok">
