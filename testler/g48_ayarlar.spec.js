@@ -111,7 +111,7 @@ test.describe('G48 Ayarlar penceresi — Ciltli', () => {
           altin: c.color === altin, uyari: c.color === uyari };
       });
     });
-    expect(k.length, '8 bölüm kicker\'ı').toBe(8);   // v63: Zenginleştir eklendi
+    expect(k.length, '9 bölüm kicker\'ı').toBe(9);   // v63: Zenginleştir · v104: Okuma tipografisi
     for (const x of k) {
       expect(x.versal, x.metin).toBe('uppercase');
       expect(x.aralik, x.metin + ' harf aralığı').toBeGreaterThan(0.5);
@@ -128,7 +128,7 @@ test.describe('G48 Ayarlar penceresi — Ciltli', () => {
     await ayarAc(page);
     const sira = await page.evaluate(() =>
       [...document.querySelectorAll('#ortuAyar .ay-bolum')].map(b => b.id));
-    expect(sira).toEqual(['ayBolumSenkron', 'ayBolumGorunum', 'ayBolumHatirlatma',
+    expect(sira).toEqual(['ayBolumSenkron', 'ayBolumGorunum', 'ayBolumTipografi', 'ayBolumHatirlatma',
       'ayBolumAktarim', 'ayBolumZengin', 'ayBolumKatalog', 'ayBolumDepolama', 'ayBolumTehlike']);
     await expect(page.locator('#ayYuvaSenkron #senkronKart')).toHaveCount(1);
     await expect(page.locator('#ayYuvaKatalog #katalogKart')).toHaveCount(1);

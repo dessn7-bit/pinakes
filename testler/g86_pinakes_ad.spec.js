@@ -43,7 +43,7 @@ test.describe('G86 Pinakes — görünen ad', () => {
     await expect(page.locator('#hkHakkinda'), 'adın kaynağı bir cümleyle anlatılır')
       .toContainText('Kallimakhos');
     /* g48 kilitleri bozulmadı: Hakkında dipnotu kicker/ay-bolum SAYMAZ */
-    expect(await page.locator('#ortuAyar .kicker').count(), '8 bölüm kickerı aynı').toBe(8);
+    expect(await page.locator('#ortuAyar .kicker').count(), '9 bölüm kickerı aynı').toBe(9);   // v104: Okuma tipografisi
   });
 
   test('(b) manifest: ad/alt başlık yeni; start_url ve scope AYNEN, id alanı YOK', async ({ page }) => {

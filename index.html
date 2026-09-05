@@ -44,6 +44,112 @@ function _iz(yer, e){ if(window.__KK_IZ) console.warn('[kk]', yer, e); }
     });
   }catch(e){ /* özellik yok (eski tarayıcı) — sessiz geçiş kasıtlı */ }
 })();
+/* ---------- TİPOGRAFİ HAVUZU (v104) ----------
+   Pinakes'in okuma yüzeyleri UZUN metin taşır: 299 kitapta ortalama 545
+   kelimelik özet + ontoloji, üstüne not ve alıntılar. Bu havuz o metinlerin
+   OKUNMA konforunu ayarlar. Liste, kart, başlık ve künye yüzeylerine BİLEREK
+   inmez — oradaki ölçüler tasarımın kendi ritmidir, okuma ölçüsü değil.
+   Tema gibi CİHAZ tercihidir (telefonda büyük punto isteyip masaüstünde
+   istememek meşru), bu yüzden localStorage'da yaşar ve senkronla taşınmaz;
+   yedeğe 'tercihler' bloğundan girer — kk_tema_v1 / kk_gorunum_v1 ile aynı
+   sözleşme.
+   Tema gibi İLK BOYAMADAN ÖNCE uygulanır: sonra uygulansaydı özet varsayılan
+   punto ile bir an yanıp sönerdi. */
+(function(){
+  var ANAHTAR = 'kk_tipografi_v1';
+  /* Font seçenekleri = uygulamanın KENDİ woff2 dosyaları + sistem yığınları.
+     Google Fonts BİLEREK yok: Pinakes çevrimdışı çalışır (sw ASSETS fontları
+     önbelleğe alır) ve TR'de CDN erişimi güvenilir değil. Diskte iki aile var
+     (Lora, Cormorant); üçüncü/dördüncü seçenek sistem yığınıdır — indirme yok. */
+  var FONTLAR = {
+    lora:      "'Lora',Georgia,'Times New Roman',serif",
+    cormorant: "'Cormorant Garamond','Iowan Old Style',Georgia,serif",
+    sistem:    "system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif",
+    georgia:   "Georgia,'Times New Roman',Times,serif"
+  };
+  /* SEÇENEK TABLOSU tek otorite: hem panel düğmelerini üretir hem DOĞRULAMA
+     kapısıdır. Değer iki güvenilmez kaynaktan gelebilir — localStorage ve
+     YEDEK DOSYASI; listede olmayan değer sessizce düşer, varsayılana dönülür.
+     v:null = "varsayılan" = jeton hiç yazılmaz (CSS yedeği devrede kalır). */
+  var SECENEK = {
+    fs:   { css:'--tipo-fs',   ad:'Yazı boyutu', ipucu:'Gövde puntosu (çarpan)',
+            secim:[{v:null,ad:'Varsayılan'},{v:0.92,ad:'Küçük'},{v:1.1,ad:'Büyük'},{v:1.25,ad:'Çok büyük'}] },
+    lh:   { css:'--tipo-lh',   ad:'Satır yüksekliği', ipucu:'Satırlar arası nefes',
+            secim:[{v:null,ad:'Varsayılan'},{v:0.9,ad:'Sık'},{v:1.12,ad:'Ferah'},{v:1.25,ad:'Çok ferah'}] },
+    pb:   { css:'--tipo-pb',   ad:'Paragraf arası', ipucu:'Paragrafları ayıran boşluk',
+            secim:[{v:null,ad:'Varsayılan'},{v:'.45em',ad:'Sıkı'},{v:'1.5em',ad:'Ferah'},{v:'2.1em',ad:'Çok ferah'}] },
+    olcu: { css:'--tipo-olcu', ad:'Satır uzunluğu', ipucu:'Geniş ekranda satır çok uzarsa göz satır başını kaybeder',
+            secim:[{v:null,ad:'Sınırsız'},{v:'34em',ad:'Dar'},{v:'42em',ad:'Orta'},{v:'52em',ad:'Geniş'}] },
+    font: { css:'--tipo-font', ad:'Yazı ailesi', ipucu:'Hepsi cihazda — indirme yok',
+            secim:[{v:null,ad:'Lora'},{v:'cormorant',ad:'Cormorant'},{v:'sistem',ad:'Sistem'},{v:'georgia',ad:'Georgia'}] }
+  };
+  window.TIPO_SECENEK = SECENEK;
+  function gecerli(k, v){
+    var s = SECENEK[k];
+    if(!s || v === null || v === undefined) return null;
+    for(var i = 0; i < s.secim.length; i++)
+      if(s.secim[i].v !== null && s.secim[i].v === v) return v;
+    return null;
+  }
+  /* Okuma DAİMA doğrulama kapısından geçer — bozuk/elle kurcalanmış kayıt
+     ekranı bozmasın; tek bir alan geçersizse yalnız o alan düşer. */
+  window.tipografiOku = function(){
+    var ham;
+    try{ ham = JSON.parse(localStorage.getItem(ANAHTAR) || '{}'); }catch(e){ ham = null; }
+    if(!ham || typeof ham !== 'object' || Array.isArray(ham)) ham = {};
+    var t = {};
+    for(var k in SECENEK){
+      if(!Object.prototype.hasOwnProperty.call(SECENEK, k)) continue;
+      var v = gecerli(k, ham[k]);
+      if(v !== null) t[k] = v;
+    }
+    return t;
+  };
+  window.tipografiUygula = function(t){
+    var kok = document.documentElement;
+    for(var k in SECENEK){
+      if(!Object.prototype.hasOwnProperty.call(SECENEK, k)) continue;
+      var css = SECENEK[k].css;
+      var v = (t && t[k] != null) ? t[k] : null;
+      /* removeProperty ŞART: değer silinince jeton ORTADAN KALKMALI ki CSS'teki
+         var() yedeği yeniden devreye girsin. Boş dize yazmak yetmez. */
+      if(v === null){ kok.style.removeProperty(css); continue; }
+      kok.style.setProperty(css, k === 'font' ? FONTLAR[v] : String(v));
+    }
+  };
+  window.tipografiYaz = function(k, v){
+    var t = window.tipografiOku();
+    if(v === null || v === undefined) delete t[k];
+    else{ var g = gecerli(k, v); if(g === null) return t; t[k] = g; }
+    try{
+      /* Hepsi varsayılana dönerse anahtar SİLİNİR — "{}" bırakmak yedekte ve
+         teşhiste "ayar var" yanılsaması üretirdi. */
+      if(Object.keys(t).length) localStorage.setItem(ANAHTAR, JSON.stringify(t));
+      else localStorage.removeItem(ANAHTAR);
+    }catch(e){ _iz('tipografiYaz', e); }
+    window.tipografiUygula(t);
+    return t;
+  };
+  window.tipografiSifirla = function(){
+    try{ localStorage.removeItem(ANAHTAR); }catch(e){ _iz('tipografiSifirla', e); }
+    window.tipografiUygula({});
+  };
+  /* YEDEK köprüsü — tercihler bloğu ham JSON metni taşır (tema/görünüm gibi
+     düz dize sözleşmesi). Yazım yine doğrulama kapısından geçirilir. */
+  window.tipografiHamOku = function(){
+    try{ return localStorage.getItem(ANAHTAR) || ''; }catch(e){ return ''; }
+  };
+  window.tipografiHamYaz = function(metin){
+    try{
+      var t = JSON.parse(metin);
+      if(!t || typeof t !== 'object' || Array.isArray(t)) return false;
+      localStorage.setItem(ANAHTAR, JSON.stringify(t));
+      window.tipografiUygula(window.tipografiOku());
+      return true;
+    }catch(e){ return false; }
+  };
+  window.tipografiUygula(window.tipografiOku());
+})();
 </script>
 <title>Pinakes</title>
 <link rel="manifest" href="./manifest.json">
@@ -687,9 +793,18 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
 .oz-ghost,.onto-ghost,.ts-ghost{background:none;border:none;color:var(--brass);font-family:var(--sans);
   font-size:.72rem;font-weight:600;letter-spacing:.06em;padding:0;position:relative}
 .oz-ghost::after,.onto-ghost::after,.ts-ghost::after{content:'';position:absolute;inset:-8px}
-.oz-metin,.onto-metin,.ts-govde{line-height:1.62;font-size:.95rem;overflow-wrap:anywhere}
+/* TİPOGRAFİ HAVUZU (v104) — okuma yüzeylerinin ölçüleri --tipo-* jetonlarından
+   okunur. Jeton YOKSA var() yedeği devreye girer; yedekler v103'ün BİREBİR
+   değerleridir — ayara hiç dokunmayan kullanıcıda tek piksel değişmez.
+   fs/lh bilinçli olarak ÇARPAN: yüzeyler arası oran korunur (özet 1.62 ile
+   not 1.55 aynı oranda esner, tek mutlak değere ezilmez).
+   olcu (satır uzunluğu) em cinsinden — boyutla birlikte esner, satırdaki
+   KARAKTER sayısı sabit kalır. 545 kelimelik özetlerde asıl kazanç budur. */
+.oz-metin,.onto-metin,.ts-govde{line-height:calc(1.62 * var(--tipo-lh,1));
+  font-size:calc(.95rem * var(--tipo-fs,1));font-family:var(--tipo-font,var(--sans));
+  max-width:var(--tipo-olcu,none);overflow-wrap:anywhere}
 .ts-govde{white-space:pre-wrap}
-.oz-metin p,.onto-metin p{margin:0 0 .95em}
+.oz-metin p,.onto-metin p{margin:0 0 var(--tipo-pb,.95em)}
 .oz-metin p:last-child,.onto-metin p:last-child{margin-bottom:0}
 .oz-metin strong,.onto-metin strong{font-weight:600}   /* Lora'da 700 yüzü yok; 600 = uygulamanın vurgu ağırlığı */
 .oz-metin em,.onto-metin em{font-style:italic}
@@ -742,8 +857,25 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
 .not-kart{background:transparent;border:none;border-radius:0;box-shadow:none;
   padding:12px 0;margin-top:0;position:relative;border-bottom:1px solid var(--cizgi)}
 .not-kart.alinti{border-left:1px solid var(--brass);padding-left:14px}
-.not-kart.alinti .not-metin{font-family:var(--sans);font-style:italic}
-.not-metin{font-size:.9rem;line-height:1.55;white-space:pre-wrap;overflow-wrap:break-word;padding-right:26px}
+.not-kart.alinti .not-metin{font-family:var(--tipo-font,var(--sans));font-style:italic}
+/* v104: not gövdesi de mdMini'den geçiyor → pre-wrap KALKTI. oz-metin'in
+   v101'de yaptığının aynısı: satır sonlarının sahibi artık mdMini (tek satır
+   sonu = <br>, boş satır = paragraf ayracı). ÖLÇÜLDÜ: mdMini çıktısında literal
+   satır sonu SIFIR, yani pre-wrap kalsaydı da satır sonu ikilenmezdi —
+   kaldırma gerekçesi mdMini yüzeylerinin TEK kural altında toplanması.
+   Bedeli: satır içi arka arkaya boşluklar artık tek boşluğa iner. */
+.not-metin{font-size:calc(.9rem * var(--tipo-fs,1));line-height:calc(1.55 * var(--tipo-lh,1));
+  font-family:var(--tipo-font,var(--sans));max-width:var(--tipo-olcu,none);
+  overflow-wrap:break-word;padding-right:26px}
+/* <p> marjı ŞART: bu kural olmasaydı tarayıcının 1em üst marjı ilk paragrafa
+   da binerdi — asıl "çift boşluk" riski buydu, pre-wrap değil. */
+.not-metin p{margin:0 0 var(--tipo-pb,.95em)}
+.not-metin p:last-child{margin-bottom:0}
+.not-metin strong{font-weight:600}   /* Lora'da 700 yüzü yok — oz-metin ile aynı */
+.not-metin em{font-style:italic}
+/* Alıntı bloğu zaten italik: içindeki <em> düze döner (tipografi geleneği),
+   yoksa yazarın satır içi vurgusu görünmez olurdu. */
+.not-kart.alinti .not-metin em{font-style:normal}
 .not-tarih{font-size:.7rem;color:var(--muted2);margin-top:8px}
 .not-sil{position:absolute;top:8px;right:8px;color:var(--muted2);font-size:.95rem;padding:4px}
 .not-ekle-satir{display:flex;gap:8px;margin-top:10px;align-items:flex-start}
@@ -778,6 +910,28 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
 .kapak-onizle button{font-size:.75rem;color:var(--drop);padding:4px}
 
 /* tema seçici — kendi ad alanı (tm-) */
+/* TİPOGRAFİ paneli (tp-) — tm-dugme reçetesinin eşi; sınıf yeniden
+   kullanılmaz kuralı gereği kendi ad alanı. Önizleme kutusu SAHTE değil:
+   içinde gerçek .oz-metin / .not-kart yüzeyleri durur, yani ayarın etkisini
+   taklit etmez, birebir gösterir. */
+.tp-onizleme{border:1px solid var(--kontur);border-radius:var(--r-md);
+  padding:14px 16px;background:var(--surface2);margin-bottom:16px}
+.tp-onizleme .not-kart:last-child{border-bottom:none;padding-bottom:0}
+.tp-rozet{font-family:var(--sans);font-size:.62rem;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted2);margin:14px 0 6px}
+.tp-rozet:first-child{margin-top:0}
+.tp-satir{margin-bottom:14px}
+.tp-etiket{font-size:.78rem;font-weight:600;color:var(--paper);margin-bottom:2px}
+.tp-ipucu{font-size:.68rem;color:var(--muted2);margin-bottom:7px;line-height:1.4}
+.tp-secim{display:flex;gap:6px;flex-wrap:wrap}
+/* Zemin SAYDAM: Ayarlar penceresinde dolu düğme yasak (Ciltli sözleşmesi,
+   g48 "görünür DOLU düğme yok" bunu bekçiliyor) — seçili durum tm-dugme ile
+   aynı %7 pirinç karışımıdır, alfa 0.07. */
+.tp-chip{flex:1 1 auto;padding:8px 10px;border-radius:var(--r-sm);border:1px solid var(--kontur);
+  background:transparent;color:var(--muted);font-family:var(--sans);font-size:.74rem;
+  cursor:pointer;white-space:nowrap}
+.tp-chip.tp-secili{background:color-mix(in srgb,var(--brass) 7%,transparent);color:var(--paper);
+  border-color:var(--brass);font-weight:600}
 .tm-secim{display:flex;gap:8px;flex-wrap:wrap}
 .tm-dugme{flex:1 1 auto;padding:10px 12px;border-radius:var(--r-md);border:1px solid var(--kontur);
   background:transparent;color:var(--muted);font-size:.85rem}
@@ -1181,6 +1335,21 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
           <button class="tm-dugme" data-act="tm-tema" data-v="acik"><svg class="ikon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg> Açık</button>
           <button class="tm-dugme" data-act="tm-tema" data-v="karanlik"><svg class="ikon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 13.6A8.1 8.1 0 0 1 10.4 4a8.1 8.1 0 1 0 9.6 9.6z"/></svg> Karanlık</button>
           <button class="tm-dugme" data-act="tm-tema" data-v="sistem"><svg class="ikon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/></svg> Sistem</button>
+        </div>
+      </section>
+
+      <!-- TİPOGRAFİ (tp-) — mantık: yukarıdaki tipografi boot IIFE'si (jeton
+           yazımı) + tipografiCiz (panel çizimi). Görünüm'ün hemen ardında:
+           ikisi de "ekran nasıl görünsün" sorusudur ama tema RENK, bu bölüm
+           OKUMA ÖLÇÜSÜ. Kontroller JS'ten çizilir — seçili durum tek yerden
+           türesin (tema düğmelerinde de aynı kalıp). -->
+      <section class="ay-bolum" id="ayBolumTipografi">
+        <div class="ay-bolum-bas"><span class="kicker">Okuma tipografisi</span></div>
+        <p class="ay-not">Özet, ontoloji, not ve alıntı metinlerinin okunma ölçüsü — kütüphanende ortalama 545 kelimelik özetler var, bu ayarlar onları rahat okumak için. Kitap listesi, kartlar ve başlıklar etkilenmez. Aşağıdaki örnek gerçek okuma yüzeyidir: değişiklik anında burada görünür.</p>
+        <div class="tp-onizleme" id="tpOnizleme"></div>
+        <div id="tpKontrol"></div>
+        <div class="ay-eylem">
+          <button class="btn btn-cerceve" data-act="tp-sifirla">Varsayılana döndür</button>
         </div>
       </section>
 
@@ -3441,7 +3610,7 @@ function detayAc(id){
   const notlar = (k.notlar||[]).slice().reverse();
   const notHtml = notlar.map(n => `
     <div class="not-kart ${n.tip === 'alinti' ? 'alinti' : ''}" data-nid="${escAttr(n.id)}" data-kid="${escAttr(k.id)}">
-      <div class="not-metin">${esc(n.metin)}</div>
+      <div class="not-metin">${mdMini(n.metin)}</div>
       <div class="not-tarih">${n.tip === 'alinti' ? 'Alıntı' : 'Not'}${n.sayfa ? ' · sf. ' + n.sayfa : ''} · ${trTarih(n.tarih)}</div>
       <button class="not-sil" data-act="not-sil" data-nid="${n.id}" aria-label="Notu sil">✕</button>
     </div>`).join('');
@@ -3551,7 +3720,7 @@ function alintiCiz(){
     ganHtml = `<section class="al-bolum" id="alBolumGunun">
       <div class="al-bolum-bas"><span class="kicker">Günün alıntısı</span></div>
       <blockquote class="gunun-alintisi">
-        <div class="ga-metin">&ldquo;${esc(a.metin)}&rdquo;</div>
+        <div class="ga-metin">&ldquo;${esc(mdDuz(a.metin))}&rdquo;</div>
         <div class="ga-kaynak">— ${esc(a.kitap.ad)}${a.kitap.yazar ? ', ' + esc(a.kitap.yazar) : ''}${a.sayfa ? ' (sf. ' + a.sayfa + ')' : ''}</div>
       </blockquote>
     </section>`;
@@ -3564,7 +3733,7 @@ function alintiCiz(){
 
   const listeHtml = filtreli.length ? filtreli.map(n => `
     <div class="not-kart ${n.tip === 'alinti' ? 'alinti' : ''}" data-nid="${escAttr(n.id)}" data-kid="${escAttr(n.kitap.id)}">
-      <div class="not-metin">${esc(n.metin)}</div>
+      <div class="not-metin">${mdMini(n.metin)}</div>
       <div class="not-tarih">${esc(n.kitap.ad)}${n.sayfa ? ' · sf. ' + n.sayfa : ''} · ${trTarih(n.tarih)}
         <button class="alinti-git" data-act="alinti-git" data-id="${n.kitap.id}">kitaba git →</button></div>
     </div>`).join('')
@@ -3877,6 +4046,18 @@ function dosyaIndir(icerik, ad, tip){
    pathname'den ayrışır. kk_* anahtarları AYNEN (yedek onlara yazar). */
 function tasimaEskiAdres(){ return location.pathname.indexOf('/kitaplik/') === 0; }
 function tasimaYeniAdres(){ return location.pathname.indexOf('/pinakes/') === 0; }
+/* Cihaz tercihleri TEK yerden toplanır: normal yedek de taşıma yedeği de
+   burayı çağırır. Ayrı ayrı yazılsalardı biri yeni alan kazanınca öteki
+   sessizce geride kalırdı (v104'te tam bu olmuştu: tipografi taşımaya girip
+   normal yedeğe girmeyebilirdi). Bildirim BİLEREK yok — push aboneliği köken
+   bazlıdır, taşınamaz. */
+function tercihleriTopla(){
+  const t = {};
+  try{ const v = localStorage.getItem('kk_tema_v1'); if(v) t.tema = v; }catch(e){}
+  try{ const v = localStorage.getItem('kk_gorunum_v1'); if(v) t.gorunum = v; }catch(e){}
+  try{ const v = window.tipografiHamOku ? window.tipografiHamOku() : ''; if(v) t.tipografi = v; }catch(e){}
+  return t;
+}
 async function tasimaYedegiUret(){
   const govde = { surum: YEDEK_SURUM, tarih: new Date().toISOString(), tasima: 1, ...veri,
     ozetler: window.__ozet.hepsiDisa() };
@@ -3904,9 +4085,7 @@ async function tasimaYedegiUret(){
   }catch(e){}
   /* Küçük cihaz tercihleri — bildirim BİLEREK yok: push aboneliği köken
      bazlıdır, yeni adreste yeniden kurulur (karşılama söylüyor). */
-  govde.tercihler = {};
-  try{ const t = localStorage.getItem('kk_tema_v1'); if(t) govde.tercihler.tema = t; }catch(e){}
-  try{ const g = localStorage.getItem('kk_gorunum_v1'); if(g) govde.tercihler.gorunum = g; }catch(e){}
+  govde.tercihler = tercihleriTopla();   // v104: tek otorite (tipografi de buradan)
   return govde;
 }
 async function tasimaYedegiIndir(){
@@ -3951,8 +4130,12 @@ function disaAktar(){
   /* ozetler (v80): metin IDB'de yaşadığı için ...veri spread'i artık kapsamıyor —
      özet SENKRONLANAN veridir (kapak fotoğrafının aksine), yedeğe AYRI alan
      olarak girer; iceAktar geri yükler. */
+  /* v104: tercihler NORMAL yedeğe de girdi. Eskiden yalnız taşıma yedeğinde
+     vardı; "yedek al → geri yükle" turunda tema/görünüm/tipografi sessizce
+     kayboluyordu. Geri yükleme dalı (iceAktar) zaten y.tercihler okuyordu —
+     eksik olan üretim tarafıydı. */
   dosyaIndir(JSON.stringify({ surum: YEDEK_SURUM, tarih:new Date().toISOString(), ...veri,
-      ozetler: window.__ozet.hepsiDisa() }, null, 2),
+      ozetler: window.__ozet.hepsiDisa(), tercihler: tercihleriTopla() }, null, 2),
     `pinakes-yedek-${bugun()}.json`, 'application/json');
   toast('Yedek indirildi');
 }
@@ -4136,6 +4319,12 @@ function iceAktar(dosya){
         const t = y.tercihler || {};
         if(t.tema && !localStorage.getItem('kk_tema_v1')) localStorage.setItem('kk_tema_v1', t.tema);
         if(t.gorunum && !localStorage.getItem('kk_gorunum_v1')) localStorage.setItem('kk_gorunum_v1', t.gorunum);
+        /* v104 tipografi: aynı "yalnız boşsa" kuralı — bu cihazda ayar VARSA
+           yedektekiyle ezilmez. Yazım tipografiHamYaz'ın doğrulama kapısından
+           geçer, bozuk/eski değer ekranı bozamaz; sonra panel tazelenir. */
+        if(t.tipografi && !localStorage.getItem('kk_tipografi_v1')
+           && window.tipografiHamYaz && window.tipografiHamYaz(t.tipografi))
+          { if(typeof tipografiCiz === 'function') tipografiCiz(); }
       }catch(e){}
       depoKaydet(); hepsiniCiz();
       toast(eklendi ? `${eklendi} kitap geri yüklendi` : 'Yeni kitap yok — hepsi zaten kayıtlı');
@@ -4490,6 +4679,54 @@ function hepsiniCiz(){
   if(durum.sekme === 'alinti') alintiCiz();
   // Keşfet'in bayat kalmaması kesfet.js'in hepsiniCiz sarmalamasında (v50)
 }
+/* Panel örneği: MARKDOWN İÇERİR (kalın + italik + iki paragraf) — böylece
+   önizleme yalnız ölçüyü değil, v104'te not gövdesine de inen mdMini'yi de
+   gösterir. Metinler kasten uzun: 545 kelimelik özetin satır ritmi tek
+   cümlede görünmez. */
+const TP_ORNEK_OZET = 'Kitabın **merkezî savı** şu: bellek bir arşiv değil, her hatırlayışta yeniden kurulan bir *edim*. Yazar bunu üç vaka üzerinden yürütür ve her birinde tanığın anlatısı, anlatıldıkça kendini değiştirir.\n\nSon bölüm bu savı tarihyazımına taşır: bir toplumun geçmişi de, tıpkı bireyinki gibi, ona her dönüşte biraz başkalaşır.';
+const TP_ORNEK_ALINTI = 'Geçmiş, hatırlandıkça değişen tek ülkedir.';
+const TP_ORNEK_NOT = 'Bu bölüm *Bergson* okumasıyla birlikte düşünülmeli — **süre** kavramı burada adı konmadan çalışıyor.';
+/* Önizleme GERÇEK yüzey sınıflarını (.oz-metin / .not-kart) kullanır — taklit
+   değil, birebir. Bedeli: bu düğümler DOM'da kaldığı sürece sayfada İKİ tane
+   .oz-metin olur (Playwright strict mode bunu haklı olarak arıza sayar; g78/
+   g80/g87 böyle düştü). Bu yüzden önizleme Ayarlar penceresinin ÖMRÜNE bağlı:
+   ayarAc çizer, ayarKapat siler. Çizim/silme olay dalına DEĞİL fonksiyonlara
+   bağlı — Esc ve örtüye tıklama yolları da aynı kapıdan geçsin. */
+function tipografiSil(){
+  const on = document.getElementById('tpOnizleme'), kt = document.getElementById('tpKontrol');
+  if(on) on.innerHTML = '';
+  if(kt) kt.innerHTML = '';
+}
+function tipografiCiz(){
+  const on = document.getElementById('tpOnizleme'), kt = document.getElementById('tpKontrol');
+  if(!on || !kt) return;
+  const t = window.tipografiOku ? window.tipografiOku() : {};
+  on.innerHTML =
+    '<div class="tp-rozet">Özet / ontoloji</div>' +
+    '<div class="oz-metin">' + mdMini(TP_ORNEK_OZET) + '</div>' +
+    '<div class="tp-rozet">Alıntı ve not</div>' +
+    '<div class="not-kart alinti"><div class="not-metin">' + mdMini(TP_ORNEK_ALINTI) + '</div>' +
+      '<div class="not-tarih">Alıntı · sf. 214</div></div>' +
+    '<div class="not-kart"><div class="not-metin">' + mdMini(TP_ORNEK_NOT) + '</div>' +
+      '<div class="not-tarih">Not · 12 Mart 2026</div></div>';
+  const S = window.TIPO_SECENEK || {};
+  kt.innerHTML = ['fs','lh','pb','olcu','font'].map(k => {
+    const o = S[k];
+    if(!o) return '';
+    /* data-v düz DİZE taşır (dataset başka türlüsünü tutamaz); tipe geri
+       dönüşüm tp-set'te SEÇENEK tablosundan yapılır — sayı/dize ayrımı tek
+       yerde kalsın. */
+    const chips = o.secim.map(c => {
+      const secili = (c.v === null) ? (t[k] == null) : (t[k] === c.v);
+      return '<button class="tp-chip' + (secili ? ' tp-secili' : '') + '" data-act="tp-set"' +
+        ' data-k="' + escAttr(k) + '" data-v="' + escAttr(c.v === null ? '' : String(c.v)) + '"' +
+        ' aria-pressed="' + (secili ? 'true' : 'false') + '">' + esc(c.ad) + '</button>';
+    }).join('');
+    return '<div class="tp-satir"><div class="tp-etiket">' + esc(o.ad) + '</div>' +
+      '<div class="tp-ipucu">' + esc(o.ipucu) + '</div>' +
+      '<div class="tp-secim">' + chips + '</div></div>';
+  }).join('');
+}
 function temaDugmeleriCiz(){
   const secili = window.temaTercihi ? window.temaTercihi() : 'sistem';
   document.querySelectorAll('#tmSecim .tm-dugme').forEach(b => {
@@ -4523,11 +4760,15 @@ function sekmeGec(s){
 }
 function ayarAc(){
   document.getElementById('ortuAyar').classList.add('acik');
+  tipografiCiz();
   /* Eski "Yedek sekmesine geçildi" kancalarının yerine geçen tazeleme.
      kapak.js ve katalog.js artık ayar-ac aktını dinliyor; burada tekrar
      çağırmıyoruz ki tek sahip kalsın. */
 }
-function ayarKapat(){ document.getElementById('ortuAyar').classList.remove('acik'); }
+function ayarKapat(){
+  document.getElementById('ortuAyar').classList.remove('acik');
+  tipografiSil();
+}
 
 /* ---------- klavye ve odak (a11y) ----------
    Esc en ÜSTTEKİ açık pencereyi kapatır. Kapatma mantığını çekirdek bilmez:
@@ -5052,6 +5293,17 @@ document.addEventListener('click', e => {
       toast(v === 'sistem' ? 'Tema: sistem ayarını izliyor (' + (cozum === 'karanlik' ? 'karanlık' : 'açık') + ')'
         : (v === 'karanlik' ? 'Karanlık tema açık' : 'Açık tema'));
       break; }
+    case 'tp-set': {
+      const k = el.dataset.k, o = (window.TIPO_SECENEK || {})[k];
+      if(!o) break;
+      const hedef = o.secim.find(c => (c.v === null ? '' : String(c.v)) === (v || ''));
+      window.tipografiYaz(k, hedef ? hedef.v : null);
+      tipografiCiz();
+      break; }
+    case 'tp-sifirla':
+      window.tipografiSifirla(); tipografiCiz();
+      toast('Okuma tipografisi varsayılana döndü');
+      break;
     case 'disa-aktar': disaAktar(); break;
     case 'tasima-yedek': tasimaYedegiIndir(); break;                       // v94 eski adres
     case 'tasima-yukle': document.getElementById('tasimaDosya').click(); break;   // v94 yeni adres

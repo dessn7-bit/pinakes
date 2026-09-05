@@ -178,7 +178,7 @@
         + '<span class="tk-rozet-sayi">' + bugunku.length + '</span>'
         + '<span class="tk-baslik-not">zamanı gelen alıntıların — sınav değil, yeniden karşılaşma</span></div>'
         + '<div class="tk-kart" data-nid="' + escAttr(n.id) + '" data-kid="' + escAttr(k.id) + '">'
-        +   '<div class="tk-metin">&ldquo;' + esc(n.metin) + '&rdquo;</div>'
+        +   '<div class="tk-metin">&ldquo;' + esc(mdDuz(n.metin)) + '&rdquo;</div>'
         +   '<div class="tk-kaynak">&mdash; ' + esc(k.ad)
         +     (k.yazar ? ', ' + esc(k.yazar) : '') + (n.sayfa ? ' (sf. ' + n.sayfa + ')' : '')
         +     ' <button class="tk-git" data-act="tk-git" data-id="' + escAttr(k.id) + '">kitaba git →</button></div>'
