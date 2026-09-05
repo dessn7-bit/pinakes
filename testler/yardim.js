@@ -89,10 +89,25 @@ async function rafYenile(page) {
   await rafaGec(page);
 }
 /* Eski "Yedek sekmesi" artik header'daki dis dugmesiyle acilan Ayarlar penceresi. */
+/* v106: Ayarlar 4 KATLI gruba bolundu (ayg-grup). Gruplar kapali acilir, yani
+   icerideki dugmeler gizli olur ve page.click gormez. Bu yardimci acilis
+   sonrasi TUM gruplari acar: boylece v106 oncesi yazilmis yuzlerce vakanin
+   gorunurluk beklentisi BIREBIR korunur. Akordiyonun kendi davranisini
+   g48 + g104 sinar; oteki vakalarin konusu o degil.
+   Tehlikeli bolge AYRI kalir (tehlikeAc) — orada katlama gezinme degil KAZA
+   ENGELI, acmak vakanin bilincli adimi olmali. */
+async function gruplariAc(page) {
+  const n = await page.locator('#ortuAyar details.ayg-grup').count();
+  for (let i = 0; i < n; i++) {
+    const g = page.locator('#ortuAyar details.ayg-grup').nth(i);
+    if (!(await g.evaluate(e => e.open))) await g.locator('summary.ayg-bas').click();
+  }
+}
 async function ayarlarAc(page) {
   // header'a kapsanir: bos kutuphanede Ana Sayfa'da da bir ayar-ac dugmesi var
   await page.click('header [data-act="ayar-ac"]');
   await expect(page.locator('#ortuAyar')).toHaveClass(/acik/);
+  await gruplariAc(page);
 }
 /* v56: "Kutuphaneyi bosalt" TEHLIKELI BOLGE'de ve KATLI geliyor — katlama burada
    gezinme degil KAZA ENGELI (iki confirm'e ek ucuncu kasit katmani). Yikici
@@ -261,4 +276,4 @@ async function ayrintilarAc(page) {
 }
 
 module.exports = { test, expect, tohumla, sahteKitap, agTaklit, kameraTaklit, kameraYok,
-  onaylariKabulEt, bugunISO, rafAc, rafaGec, rafYenile, ayarlarAc, tehlikeAc, ayrintilarAc };
+  onaylariKabulEt, bugunISO, rafAc, rafaGec, rafYenile, ayarlarAc, gruplariAc, tehlikeAc, ayrintilarAc };

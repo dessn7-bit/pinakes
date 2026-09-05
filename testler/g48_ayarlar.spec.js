@@ -128,8 +128,21 @@ test.describe('G48 Ayarlar penceresi — Ciltli', () => {
     await ayarAc(page);
     const sira = await page.evaluate(() =>
       [...document.querySelectorAll('#ortuAyar .ay-bolum')].map(b => b.id));
-    expect(sira).toEqual(['ayBolumSenkron', 'ayBolumGorunum', 'ayBolumTipografi', 'ayBolumHatirlatma',
-      'ayBolumAktarim', 'ayBolumZengin', 'ayBolumKatalog', 'ayBolumDepolama', 'ayBolumTehlike']);
+    /* v106 GRUPLAMA: bölümler artık 4 katlı grubun (ayg-grup) altında.
+       1 Görünüm ve okuma · 2 Bu cihaz · 3 Kütüphane verisi · 4 Tehlikeli bölge.
+       Sıra gerekçesi SIKLIK x RISK: en sık dokunulan üstte, yıkıcı en altta.
+       Aktarım YÖNE göre ikiye ayrıldı (Dışa/İçe); Zenginleştir + Katalog
+       araçları birleşti (ikisi de toplu zenginleştirme koşucusuydu). */
+    expect(sira).toEqual(['ayBolumGorunum', 'ayBolumTipografi',
+      'ayBolumSenkron', 'ayBolumHatirlatma', 'ayBolumDepolama',
+      'ayBolumDisa', 'ayBolumIce', 'ayBolumZengin', 'ayBolumTehlike']);
+    /* Grup kimliği + sırası. "Kapalı açılır" iddiası BURADA KURULAMAZ: ortak
+       ayarlarAc yardımcısı grupları açıyor (v106 öncesi yüzlerce vakanın
+       görünürlük beklentisi korunsun diye). O iddia g104'te, ham ayar-ac
+       tıklamasıyla açılan pencerede. */
+    const gruplar = await page.evaluate(() =>
+      [...document.querySelectorAll('#ortuAyar details.ayg-grup')].map(g => g.id));
+    expect(gruplar).toEqual(['aygGorunum', 'aygCihaz', 'aygVeri']);
     await expect(page.locator('#ayYuvaSenkron #senkronKart')).toHaveCount(1);
     await expect(page.locator('#ayYuvaKatalog #katalogKart')).toHaveCount(1);
   });

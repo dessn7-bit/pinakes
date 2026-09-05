@@ -58,14 +58,15 @@ test.describe('G95 kütüphane dosyası — tam değiştirme geri yükleme (v100
   test('g) Ayarlar girişi: "Kütüphane dosyası" başlığı Not dosyasının altında, düğme + gizli geri-al kartı; sw ≥ v100', async ({ page }) => {
     await hazirla(page);
     const basliklar = await page.evaluate(() =>
-      [...document.querySelectorAll('#ayBolumAktarim .ay-baslik')].map(h => h.textContent.trim()));
+      /* v106: aktarım yöne göre ikiye ayrıldı — dosya boruları İçe aktar'da. */
+      [...document.querySelectorAll('#ayBolumIce .ay-baslik')].map(h => h.textContent.trim()));
     const i = basliklar.indexOf('Kütüphane dosyası');
     expect(i).toBeGreaterThan(0);
     expect(basliklar[i - 1]).toBe('Not dosyası');
     expect(basliklar[i - 2]).toBe('Özet dosyası');
-    await expect(page.locator('#ayBolumAktarim [data-act="ky-ice"]')).toHaveText('Kütüphane dosyası seç');
+    await expect(page.locator('#ayBolumIce [data-act="ky-ice"]')).toHaveText('Kütüphane dosyası seç');
     await expect(page.locator('#kyGeriKart')).toBeHidden();   // anlık kopya yok → kart yok
-    await expect(page.locator('#ayBolumAktarim')).toContainText('tam değiştirme');
+    await expect(page.locator('#ayBolumIce')).toContainText('tam değiştirme');
     const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
     const m = sw.match(/const CACHE = ONEK \+ '-v(\d+)';/);
     expect(m, 'sw CACHE sürüm satırı').toBeTruthy();

@@ -207,6 +207,15 @@ test.describe('G104 okuma tipografisi', () => {
     expect(await page.locator('.oz-metin').count(), 'kapalıyken tekil').toBe(1);
     await page.click('[data-act="detay-kapat"]');
     await page.click('[data-act="ayar-ac"]');
+    /* v106: gruplar KAPALI açılır — panel tek ekrana sığsın. */
+    const acikSayisi = await page.evaluate(() =>
+      [...document.querySelectorAll('#ortuAyar details.ayg-grup')].filter(g => g.open).length);
+    expect(acikSayisi, 'gruplar kapalı açılır').toBe(0);
+    /* Durum şeridi KATLANMAZ: grup kapalıyken de görünür (Kaan kararı —
+       "baktığın şeyler" kapağın arkasında durmaz). */
+    await expect(page.locator('#aydSerit')).toBeVisible();
+    /* tipografi "Görünüm ve okuma" grubunun içinde — çipi görmek için aç. */
+    await page.click('#aygGorunum summary.ayg-bas');
     await expect(page.locator('#ayBolumTipografi .tp-chip').first()).toBeVisible();
     expect(await page.locator('#tpOnizleme .oz-metin').count()).toBe(1);
     await page.click('[data-act="ayar-kapat"]');

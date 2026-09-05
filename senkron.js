@@ -696,6 +696,10 @@
     yuva ? kap.appendChild(kart) : kap.insertBefore(kart, kap.firstChild);
   }
   function durumCiz(){
+    /* v106: Ayarlar durum şeridi aynı anda tazelenir — şerit senkron
+       kontrollerinin ÜSTÜNDE duruyor, "Şimdi senkronize et"ten sonra bayat
+       kalmamalı. Kanca isteğe bağlı: index.html eski sürümse sessiz geçer. */
+    if(typeof window.aydSeritCiz === 'function') window.aydSeritCiz();
     const dEl = document.getElementById('senkronDurum');
     if(!dEl) return;
     const form = document.getElementById('senkronForm'), bagli = document.getElementById('senkronBagli');
@@ -788,6 +792,19 @@
   else document.addEventListener('DOMContentLoaded', baslat);
 
   // test kancaları
+  /* durumOzet (v106): Ayarlar durum ŞERİDİ için ham veri. durumCiz PENCERE İÇİ
+     cümleyi kurar; şerit tek satır ister. İkisi de aynı 'ayar' nesnesinden
+     beslensin diye cümle DEĞİL veri dışa verilir — şerit kendi dilini kurar,
+     iki metin birbirinden sapmaz. */
+  function durumOzet(){
+    return {
+      kurulu: kurulu(),
+      bagli: !!(ayar && ayar.oda) && !eskiSurum,
+      eskiSurum: !!eskiSurum,
+      oda: (ayar && ayar.oda) || '',
+      sonSenkron: (ayar && ayar.sonSenkron) || null
+    };
+  }
   window.__senkron = { birlestir, damgala, senkronEt, durumCiz, ayarKaydet, kurulu,
-    ozetBirlesim, ozetSenkronEt, ANLIK_SURUM, SEMA_SURUM };
+    ozetBirlesim, ozetSenkronEt, durumOzet, ANLIK_SURUM, SEMA_SURUM };
 })();

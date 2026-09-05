@@ -731,7 +731,10 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
    --drop), DURUM (katlı gelir → düğmeye ulaşmak kasıtlı bir adım ister).
    Katlama burada gezinme aracı değil KAZA ENGELİ; iki confirm'e ek üçüncü
    kasıt katmanı. */
-.ay-tehlike{margin-top:26px;padding-top:16px;border-top:1px solid var(--drop);border-bottom:none}
+/* v106: ust bosluk 26 -> 34. Ayrim GORECELIDIR (g48 bunu normal bolumun
+   ustune +12 esigiyle olcuyor): gruplama bolumler arasi bosluga 18px
+   getirdi, 26 artik "belirgin kopuk" degildi. */
+.ay-tehlike{margin-top:34px;padding-top:16px;border-top:1px solid var(--drop);border-bottom:none}
 .ay-tehlike > summary{list-style:none;display:flex;align-items:baseline;gap:10px}
 .ay-tehlike > summary::-webkit-details-marker{display:none}
 .ay-tehlike .kicker{color:var(--drop)}
@@ -970,6 +973,43 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
    kullanılmaz kuralı gereği kendi ad alanı. Önizleme kutusu SAHTE değil:
    içinde gerçek .oz-metin / .not-kart yüzeyleri durur, yani ayarın etkisini
    taklit etmez, birebir gösterir. */
+/* ---------- AYARLAR GRUPLARI (ayg-, v106) ----------
+   9 düz bölüm 8,7 ekran kaydırma yapıyordu ve üç ayrı cins iş tek listedeydi:
+   AYARLADIĞIN (tema, tipografi, senkron, hatırlatma), ÇALIŞTIRDIĞIN (tara,
+   içe aktar — bunlar fiil), BAKTIĞIN (depolama sayaçları).
+   Dört grup + katlama: kapalıyken ~1 ekran. AKORDİYON seçildi (sekme ya da
+   alt-ekran değil): repoda <details> kalıbı zaten var (tehlikeli bölge,
+   zg-katla), gezinme yığını gerektirmiyor ve modal içinde geri-tuşu
+   semantiğini bozmuyor. Bölümlerin kendi .kicker başlıkları KORUNUR —
+   iki düzeyli hiyerarşi: GRUP (büyük) > bölüm (kicker). */
+.ayg-grup{border-bottom:1px solid var(--cizgi)}
+.ayg-grup[open]{padding-bottom:10px}
+.ayg-bas{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;
+  gap:10px;padding:15px 0;color:var(--paper)}
+.ayg-bas::-webkit-details-marker{display:none}
+.ayg-bas:focus-visible{outline:2px solid var(--brass);outline-offset:3px;border-radius:var(--r-mini)}
+.ayg-ad{display:flex;flex-direction:column;gap:3px}
+.ayg-ust{font-family:var(--serif);font-size:1.2rem;line-height:1.2}
+.ayg-alt{font-family:var(--sans);font-size:.72rem;color:var(--muted2);line-height:1.35}
+.ayg-ok{flex:0 0 auto;color:var(--brass);font-size:.9rem;transition:transform .18s}
+.ayg-grup[open] .ayg-ok{transform:rotate(90deg)}
+@media (prefers-reduced-motion:reduce){.ayg-ok{transition:none}}
+/* Grup İÇİNDEKİ bölüm kendi üst boşluğunu bırakır — ayraç artık grubun. */
+.ayg-grup .ay-bolum{padding-top:0}
+.ayg-grup .ay-bolum + .ay-bolum{margin-top:18px}
+/* ---------- DURUM ŞERİDİ (ayd-, v106) ----------
+   KARAR (Kaan): "baktığın şeyler" kapağın arkasında durmaz. Senkron ve
+   depolama akordiyonun ÜSTÜNDE, katlanmadan; KONTROLLERİ "Bu cihaz" grubunun
+   içinde kalır (şerit salt-okur). Hatırlatma BİLEREK yok — anlık merak edilen
+   bir bilgi değil, kurulduktan sonra bakılmaz. */
+.ayd-serit{border:1px solid var(--kontur);border-radius:var(--r-md);background:var(--surface2);
+  padding:11px 13px;margin-bottom:6px;display:flex;flex-direction:column;gap:7px}
+.ayd-satir{display:flex;align-items:baseline;gap:9px;font-size:.78rem;color:var(--muted);
+  font-family:var(--sans);line-height:1.4}
+.ayd-ikon{flex:0 0 auto;color:var(--brass);font-size:.8rem;line-height:1.4}
+.ayd-metin{flex:1 1 auto;overflow-wrap:anywhere}
+.ayd-metin b{color:var(--paper);font-weight:600}
+.ayd-kopuk .ayd-ikon{color:var(--muted2)}
 .tp-onizleme{border:1px solid var(--kontur);border-radius:var(--r-md);
   padding:14px 16px;background:var(--surface2);margin-bottom:16px}
 .tp-onizleme .not-kart:last-child{border-bottom:none;padding-bottom:0}
@@ -1382,11 +1422,17 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
       <button class="btn btn-cerceve" data-act="tasima-yedek">Taşıma yedeğini indir</button>
     </div>
     <div class="yedek-wrap">
-      <section class="ay-bolum" id="ayBolumSenkron">
-        <div class="ay-bolum-bas"><span class="kicker">Senkron</span></div>
-        <div class="ay-yuva" id="ayYuvaSenkron"></div>
-      </section>
+      <!-- DURUM ŞERİDİ (ayd-, v106): salt-okur, KATLANMAZ. Kaan kararı —
+           "baktığın şeyler" kapağın arkasında durmaz. Senkron + depolama;
+           hatırlatma BİLEREK yok (kurulduktan sonra bakılan bir bilgi değil).
+           Kontroller şeritte DEĞİL, "Bu cihaz" grubunun içinde. -->
+      <div class="ayd-serit" id="aydSerit" aria-live="polite"></div>
 
+      <details class="ayg-grup" id="aygGorunum">
+        <summary class="ayg-bas">
+          <span class="ayg-ad"><span class="ayg-ust">Görünüm ve okuma</span><span class="ayg-alt">Tema · yazı boyutu, satır ölçüleri, yazı ailesi</span></span>
+          <span class="ayg-ok" aria-hidden="true">›</span>
+        </summary>
       <section class="ay-bolum" id="ayBolumGorunum">
         <div class="ay-bolum-bas"><span class="kicker">Görünüm</span></div>
         <p class="ay-not">Gece okurken ekran gözünü yormasın. “Sistem” seçilirse telefonunun/bilgisayarının karanlık mod ayarını izler.</p>
@@ -1396,12 +1442,6 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
           <button class="tm-dugme" data-act="tm-tema" data-v="sistem"><svg class="ikon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/></svg> Sistem</button>
         </div>
       </section>
-
-      <!-- TİPOGRAFİ (tp-) — mantık: yukarıdaki tipografi boot IIFE'si (jeton
-           yazımı) + tipografiCiz (panel çizimi). Görünüm'ün hemen ardında:
-           ikisi de "ekran nasıl görünsün" sorusudur ama tema RENK, bu bölüm
-           OKUMA ÖLÇÜSÜ. Kontroller JS'ten çizilir — seçili durum tek yerden
-           türesin (tema düğmelerinde de aynı kalıp). -->
       <section class="ay-bolum" id="ayBolumTipografi">
         <div class="ay-bolum-bas"><span class="kicker">Okuma tipografisi</span></div>
         <p class="ay-not"><b>Yazı boyutu</b> ve <b>yazı ailesi</b> uygulamanın tamamını etkiler — liste, kart, düğme, form, menü, detay. Boyut kör çarpan değil: okuma metni tam oranda, arayüz metni yarı oranda büyür, böylece sekme çubuğu ve düğmeler taşmaz. <b>Satır yüksekliği</b>, <b>paragraf arası</b> ve <b>satır uzunluğu</b> yalnız okuma metinlerine (özet, ontoloji, not, alıntı) iner — bunlar akan metnin ölçüleridir, tek satırlık etikette karşılığı yok. Aşağıdaki örnek gerçek okuma yüzeyidir.</p>
@@ -1411,11 +1451,17 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
           <button class="btn btn-cerceve" data-act="tp-sifirla">Varsayılana döndür</button>
         </div>
       </section>
+      </details>
 
-      <!-- HATIRLATMA (ht-) — mantık bildirim.js'te. Gizlilik sözleşmesi:
-           alıntı METNİ sunucuya gitmez; sunucu yalnız payload'sız "uyan"
-           sinyali yollar, bildirim metnini service worker cihazdaki
-           IndexedDB özetinden üretir. -->
+      <details class="ayg-grup" id="aygCihaz">
+        <summary class="ayg-bas">
+          <span class="ayg-ad"><span class="ayg-ust">Bu cihaz</span><span class="ayg-alt">Senkron · hatırlatma · depolama</span></span>
+          <span class="ayg-ok" aria-hidden="true">›</span>
+        </summary>
+      <section class="ay-bolum" id="ayBolumSenkron">
+        <div class="ay-bolum-bas"><span class="kicker">Senkron</span></div>
+        <div class="ay-yuva" id="ayYuvaSenkron"></div>
+      </section>
       <section class="ay-bolum" id="ayBolumHatirlatma">
         <div class="ay-bolum-bas"><span class="kicker">Hatırlatma</span></div>
         <p class="ay-not">Tekrar vakti gelen alıntın olduğunda günde en fazla bir bildirim.
@@ -1436,9 +1482,44 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
           <button class="btn btn-cerceve" data-act="ht-test" hidden>Deneme bildirimi gönder</button>
         </div>
       </section>
+      <section class="ay-bolum" id="ayBolumDepolama">
+        <div class="ay-bolum-bas"><span class="kicker">Depolama</span></div>
+        <h3 class="ay-baslik">Kitap özetlerin</h3>
+        <p class="ay-not">Özet metinlerin cihazın kalıcı deposunda (IndexedDB) saklanır, senkrona ve
+      JSON yedeğine <b>girer</b>. Uzun özetler ana kütüphane kaydını şişirmez — senkronda yalnız
+      değişen özet gönderilir.</p>
+        <div class="kp-depo-satir" id="ozDepoBilgi">Hesaplanıyor…</div>
+        <h3 class="ay-baslik">Kapak fotoğrafları</h3>
+        <p class="ay-not">Kendi çektiğin kapak fotoğrafları <b>yalnız bu cihazda</b> saklanır — senkrona ve JSON
+      yedeğine girmezler. Cihaz değiştirirsen fotoğrafları yeni cihazda yeniden çekmen gerekir.</p>
+        <div class="kp-depo-satir" id="kpDepoBilgi">Hesaplanıyor…</div>
+        <div class="ay-eylem">
+          <button class="btn btn-tehlike" data-act="kp-tum-sil">Tüm fotoğrafları sil</button>
+        </div>
+        <h3 class="ay-baslik">Metin tanıma paketi</h3>
+        <p class="ay-not">"Fotoğraftan alıntı" özelliğinin Türkçe metin tanıma paketi (tesseract.js).
+      İlk kullanımda kendiliğinden <b>bir kez</b> indirilir ve bu cihazda saklanır — sonrası çevrimdışı
+      çalışır. Silersen yer açılır; gerektiğinde yeniden indirilir.</p>
+        <div class="oc-depo-satir" id="ocDepoBilgi">Hesaplanıyor…</div>
+        <div class="ay-eylem">
+          <!-- Silme yıkıcı değil (yeniden indirilebilir veri) → tehlike dili hak
+               etmiyor, kontur düğme yeter; kapak silmesi tehlike renginde çünkü
+               fotoğraf geri gelmez. Düğme paket yokken gizli (ocr.js yönetir). -->
+          <button class="btn btn-cerceve" data-act="oc-paket-sil" hidden>Paketi sil</button>
+        </div>
+      </section>
+      </details>
 
-      <section class="ay-bolum" id="ayBolumAktarim">
-        <div class="ay-bolum-bas"><span class="kicker">İçe / dışa aktarım</span></div>
+      <details class="ayg-grup" id="aygVeri">
+        <summary class="ayg-bas">
+          <span class="ayg-ad"><span class="ayg-ust">Kütüphane verisi</span><span class="ayg-alt">Dışa aktar · içe aktar · zenginleştir</span></span>
+          <span class="ayg-ok" aria-hidden="true">›</span>
+        </summary>
+      <!-- v106: eski "İçe / dışa aktarım" YÖNE göre ikiye ayrıldı. Tek kovada
+           9 başlık vardı ve 6'sı içeri, 3'ü dışarı gidiyordu; zıt iki yön aynı
+           başlığın altında aranıyordu. -->
+      <section class="ay-bolum" id="ayBolumDisa">
+        <div class="ay-bolum-bas"><span class="kicker">Dışa aktar</span></div>
         <h3 class="ay-baslik">Yedek al</h3>
         <p class="ay-not">Tüm kütüphaneni (kitaplar, notlar, seanslar, hedefler) tek JSON dosyası olarak indir.</p>
         <div class="ay-eylem">
@@ -1451,6 +1532,9 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
           <button class="btn btn-cerceve" data-act="md-alinti">Sadece alıntılar (.md)</button>
           <button class="btn btn-cerceve" data-act="md-hepsi">Alıntılar + notlar (.md)</button>
         </div>
+      </section>
+      <section class="ay-bolum" id="ayBolumIce">
+        <div class="ay-bolum-bas"><span class="kicker">İçe aktar</span></div>
         <h3 class="ay-baslik">Goodreads'ten aktar</h3>
         <p class="ay-not">Goodreads → My Books → sol menüde <b>Import and export</b> → <b>Export Library</b> ile CSV indir, buraya yükle. Kitaplar rafları (okundu/okunuyor/okunacak), puanların (5'lik → 10'luğa çevrilir), tarihler, yorumların ve kapaklarıyla gelir.</p>
         <div class="ay-eylem">
@@ -1521,10 +1605,10 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
         </div>
         <div class="ky-geri" id="kyGeriKart" hidden></div>
       </section>
-
-      <!-- ZENGİNLEŞTİR (zg-) — mantık zengin.js'te. Eksik alan sayımı + toplu
-           tarama; hiçbir şey önizleme onayı olmadan yazılmaz, dolu alana
-           dokunulmaz (v63). -->
+      <!-- v106: "Zenginleştir" ile "Katalog araçları" BİRLEŞTİ. İkisi de toplu
+           veri zenginleştirme koşucusuydu; ayrılıkları kavramsal değil tarihsel
+           (hangi sprintte eklendikleri). #ayYuvaKatalog yuvası AYNEN korunur
+           — katalog.js ve zengin.js boot'ta o seçiciye yazıyor. -->
       <section class="ay-bolum" id="ayBolumZengin">
         <div class="ay-bolum-bas"><span class="kicker">Zenginleştir</span></div>
         <h3 class="ay-baslik">Kütüphaneyi zenginleştir</h3>
@@ -1551,46 +1635,35 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
         <div class="ay-eylem">
           <button class="btn btn-cerceve" data-act="ts-ayar">Kitap açıklamasını otomatik getir</button>
         </div>
-      </section>
-
-      <section class="ay-bolum" id="ayBolumKatalog">
-        <div class="ay-bolum-bas"><span class="kicker">Katalog araçları</span></div>
         <div class="ay-yuva" id="ayYuvaKatalog"></div>
       </section>
+      </details>
 
-      <section class="ay-bolum" id="ayBolumDepolama">
-        <div class="ay-bolum-bas"><span class="kicker">Depolama</span></div>
-        <h3 class="ay-baslik">Kitap özetlerin</h3>
-        <p class="ay-not">Özet metinlerin cihazın kalıcı deposunda (IndexedDB) saklanır, senkrona ve
-      JSON yedeğine <b>girer</b>. Uzun özetler ana kütüphane kaydını şişirmez — senkronda yalnız
-      değişen özet gönderilir.</p>
-        <div class="kp-depo-satir" id="ozDepoBilgi">Hesaplanıyor…</div>
-        <h3 class="ay-baslik">Kapak fotoğrafları</h3>
-        <p class="ay-not">Kendi çektiğin kapak fotoğrafları <b>yalnız bu cihazda</b> saklanır — senkrona ve JSON
-      yedeğine girmezler. Cihaz değiştirirsen fotoğrafları yeni cihazda yeniden çekmen gerekir.</p>
-        <div class="kp-depo-satir" id="kpDepoBilgi">Hesaplanıyor…</div>
-        <div class="ay-eylem">
-          <button class="btn btn-tehlike" data-act="kp-tum-sil">Tüm fotoğrafları sil</button>
-        </div>
-        <h3 class="ay-baslik">Metin tanıma paketi</h3>
-        <p class="ay-not">"Fotoğraftan alıntı" özelliğinin Türkçe metin tanıma paketi (tesseract.js).
-      İlk kullanımda kendiliğinden <b>bir kez</b> indirilir ve bu cihazda saklanır — sonrası çevrimdışı
-      çalışır. Silersen yer açılır; gerektiğinde yeniden indirilir.</p>
-        <div class="oc-depo-satir" id="ocDepoBilgi">Hesaplanıyor…</div>
-        <div class="ay-eylem">
-          <!-- Silme yıkıcı değil (yeniden indirilebilir veri) → tehlike dili hak
-               etmiyor, kontur düğme yeter; kapak silmesi tehlike renginde çünkü
-               fotoğraf geri gelmez. Düğme paket yokken gizli (ocr.js yönetir). -->
-          <button class="btn btn-cerceve" data-act="oc-paket-sil" hidden>Paketi sil</button>
-        </div>
-      </section>
+
+      <!-- TİPOGRAFİ (tp-) — mantık: yukarıdaki tipografi boot IIFE'si (jeton
+           yazımı) + tipografiCiz (panel çizimi). Görünüm'ün hemen ardında:
+           ikisi de "ekran nasıl görünsün" sorusudur ama tema RENK, bu bölüm
+           OKUMA ÖLÇÜSÜ. Kontroller JS'ten çizilir — seçili durum tek yerden
+           türesin (tema düğmelerinde de aynı kalıp). -->
+
+
+      <!-- HATIRLATMA (ht-) — mantık bildirim.js'te. Gizlilik sözleşmesi:
+           alıntı METNİ sunucuya gitmez; sunucu yalnız payload'sız "uyan"
+           sinyali yollar, bildirim metnini service worker cihazdaki
+           IndexedDB özetinden üretir. -->
+
+
+      <!-- ZENGİNLEŞTİR (zg-) — mantık zengin.js'te. Eksik alan sayımı + toplu
+           tarama; hiçbir şey önizleme onayı olmadan yazılmaz, dolu alana
+           dokunulmaz (v63). -->
+
 
       <!-- Kapak fotoğrafı silme BİLEREK tehlikeli bölgede DEĞİL: cihaz-yereli,
            yedeğe zaten girmeyen, yeniden çekilebilir veri; ve bağlamı (sayaç +
            boyut) hemen üstünde. Tehlikeli bölge GERİ ALINAMAZ ve TÜM kütüphaneyi
            etkileyen tek eyleme ayrılmış — iki kalem koysaydım oraya girmek
            sıradanlaşır ve uyarı gücünü yitirirdi. -->
-      <details class="ay-bolum ay-tehlike" id="ayBolumTehlike">
+      <details class="ay-bolum ay-tehlike ayg-tekil" id="ayBolumTehlike">
         <summary>
           <span class="kicker">Tehlikeli bölge</span>
           <span class="ay-tehlike-ozet">Kütüphaneyi boşalt</span>
@@ -4738,6 +4811,67 @@ function hepsiniCiz(){
   if(durum.sekme === 'alinti') alintiCiz();
   // Keşfet'in bayat kalmaması kesfet.js'in hepsiniCiz sarmalamasında (v50)
 }
+/* ---------- AYARLAR DURUM ŞERİDİ (ayd-, v106) ----------
+   SALT-OKUR. Kontroller "Bu cihaz" grubunun içinde kalır; şerit yalnız
+   "bakılan" iki bilgiyi kapağın önünde tutar (Kaan kararı): senkron durumu ve
+   depolama. Hatırlatma BİLEREK yok — kurulduktan sonra merak edilmez.
+   Cümleyi ŞERİT kurar ama VERİ senkron.js'ten gelir (durumOzet): pencere içi
+   uzun cümleyle şeridin tek satırı aynı kaynaktan beslensin, sapmasınlar. */
+function aydTarih(t){
+  if(!t) return null;
+  try{ return new Date(t).toLocaleString('tr-TR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }); }
+  catch(e){ return null; }
+}
+function aydBoyut(bayt){
+  const b = Number(bayt) || 0;
+  if(b < 1024) return b + ' B';
+  if(b < 1024 * 1024) return Math.round(b / 1024) + ' KB';
+  return (b / (1024 * 1024)).toFixed(2).replace('.', ',') + ' MB';
+}
+function aydSatir(ikonAd, ic, kopuk){
+  return '<div class="ayd-satir' + (kopuk ? ' ayd-kopuk' : '') + '">' +
+    '<span class="ayd-ikon">' + ikon(ikonAd) + '</span>' +
+    '<span class="ayd-metin">' + ic + '</span></div>';
+}
+function aydSenkronSatiri(){
+  const d = (window.__senkron && window.__senkron.durumOzet) ? window.__senkron.durumOzet() : null;
+  if(!d || !d.kurulu) return aydSatir('durakla', 'Senkron bu sürümde yapılandırılmamış', true);
+  if(d.eskiSurum) return aydSatir('uyari', 'Senkron <b>duraklatıldı</b> — bu cihaz eski sürümde, kapatıp aç', false);
+  if(!d.bagli) return aydSatir('durakla', 'Senkron <b>kapalı</b> — bu cihaz kendi kütüphanesini tutuyor', true);
+  const ne = aydTarih(d.sonSenkron);
+  return aydSatir('onay', '<b>Bağlı</b> · oda ' + esc(d.oda) +
+    ' · son eşitleme <b>' + (ne ? esc(ne) : 'henüz yok') + '</b>', false);
+}
+/* Kapak boyutu IDB'den ASENKRON gelir: satır önce özetle çizilir, kapak
+   sayısı düşünce yerine oturur. Bekleyip tek seferde çizmek şeridi
+   açılışta boş bırakırdı. */
+function aydDepoSatiri(kapak){
+  let ic;
+  try{
+    const o = window.__ozet.sayim();
+    ic = o.n + ' özet <b>' + aydBoyut(o.bayt) + '</b>';
+  }catch(e){ ic = 'özet: hesaplanamadı'; }
+  ic += ' · ' + (kapak
+    ? kapak.n + ' kapak <b>' + aydBoyut(kapak.bayt) + '</b>'
+    : 'kapak sayılıyor…');
+  return aydSatir('raf', ic, false);
+}
+function aydSeritCiz(kapak){
+  const el = document.getElementById('aydSerit');
+  if(!el) return;
+  el.innerHTML = aydSenkronSatiri() + aydDepoSatiri(kapak);
+  if(kapak || !(window.__kapak && window.__kapak.hepsi)) return;
+  window.__kapak.hepsi().then(b => {
+    const liste = b || [];
+    /* Pencere bu arada kapanmış olabilir — düğüm hâlâ duruyorsa yaz. */
+    if(document.getElementById('aydSerit'))
+      aydSeritCiz({ n: liste.length, bayt: liste.reduce((t, x) => t + ((x && x.size) || 0), 0) });
+  }).catch(() => {
+    if(document.getElementById('aydSerit')) aydSeritCiz({ n: 0, bayt: 0 });
+  });
+}
+window.aydSeritCiz = aydSeritCiz;   // senkron.js durumCiz sonunda çağırır
+
 /* Panel örneği: MARKDOWN İÇERİR (kalın + italik + iki paragraf) — böylece
    önizleme yalnız ölçüyü değil, v104'te not gövdesine de inen mdMini'yi de
    gösterir. Metinler kasten uzun: 545 kelimelik özetin satır ritmi tek
@@ -4820,6 +4954,7 @@ function sekmeGec(s){
 function ayarAc(){
   document.getElementById('ortuAyar').classList.add('acik');
   tipografiCiz();
+  aydSeritCiz();
   /* Eski "Yedek sekmesine geçildi" kancalarının yerine geçen tazeleme.
      kapak.js ve katalog.js artık ayar-ac aktını dinliyor; burada tekrar
      çağırmıyoruz ki tek sahip kalsın. */
