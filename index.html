@@ -72,15 +72,17 @@ function _iz(yer, e){ if(window.__KK_IZ) console.warn('[kk]', yer, e); }
      YEDEK DOSYASI; listede olmayan değer sessizce düşer, varsayılana dönülür.
      v:null = "varsayılan" = jeton hiç yazılmaz (CSS yedeği devrede kalır). */
   var SECENEK = {
-    fs:   { css:'--tipo-fs',   ad:'Yazı boyutu', ipucu:'Gövde puntosu (çarpan)',
+    /* fs'in 'css' alani YOK: tek degerden --tipo-kok + --tipo-oku dogar
+       (bkz. tipografiUygula). Otekiler tek jetona yazar. */
+    fs:   {                    ad:'Yazı boyutu', ipucu:'TÜM uygulama — okuma metni tam, arayüz yarı oranda büyür',
             secim:[{v:null,ad:'Varsayılan'},{v:0.92,ad:'Küçük'},{v:1.1,ad:'Büyük'},{v:1.25,ad:'Çok büyük'}] },
-    lh:   { css:'--tipo-lh',   ad:'Satır yüksekliği', ipucu:'Satırlar arası nefes',
+    lh:   { css:'--tipo-lh',   ad:'Satır yüksekliği', ipucu:'Yalnız okuma metni — satırlar arası nefes',
             secim:[{v:null,ad:'Varsayılan'},{v:0.9,ad:'Sık'},{v:1.12,ad:'Ferah'},{v:1.25,ad:'Çok ferah'}] },
-    pb:   { css:'--tipo-pb',   ad:'Paragraf arası', ipucu:'Paragrafları ayıran boşluk',
+    pb:   { css:'--tipo-pb',   ad:'Paragraf arası', ipucu:'Yalnız okuma metni — paragrafları ayıran boşluk',
             secim:[{v:null,ad:'Varsayılan'},{v:'.45em',ad:'Sıkı'},{v:'1.5em',ad:'Ferah'},{v:'2.1em',ad:'Çok ferah'}] },
-    olcu: { css:'--tipo-olcu', ad:'Satır uzunluğu', ipucu:'Geniş ekranda satır çok uzarsa göz satır başını kaybeder',
+    olcu: { css:'--tipo-olcu', ad:'Satır uzunluğu', ipucu:'Yalnız okuma metni — geniş ekranda satır uzayınca göz satır başını kaybeder',
             secim:[{v:null,ad:'Sınırsız'},{v:'34em',ad:'Dar'},{v:'42em',ad:'Orta'},{v:'52em',ad:'Geniş'}] },
-    font: { css:'--tipo-font', ad:'Yazı ailesi', ipucu:'Hepsi cihazda — indirme yok',
+    font: { css:'--tipo-font', ad:'Yazı ailesi', ipucu:'TÜM uygulamanın gövde yazısı; başlıklar Cormorant kalır. Hepsi cihazda — indirme yok',
             secim:[{v:null,ad:'Lora'},{v:'cormorant',ad:'Cormorant'},{v:'sistem',ad:'Sistem'},{v:'georgia',ad:'Georgia'}] }
   };
   window.TIPO_SECENEK = SECENEK;
@@ -105,16 +107,50 @@ function _iz(yer, e){ if(window.__KK_IZ) console.warn('[kk]', yer, e); }
     }
     return t;
   };
+  /* ---------- KAPSAM ve SÖNÜM (v105) ----------
+     Boyut ayarı uygulamanın TAMAMINI etkiler ama KÖR ÇARPAN DEĞİLDİR: bir
+     arayüzde düğme metniyle paragraf metni aynı oranda büyümemeli. Düğme,
+     etiket, sekme ve künye SABİT KUTULARDA yaşar (Pinakes'te tüm padding/
+     yükseklik px) — oradaki metin okuma metniyle aynı hızda büyürse satır
+     taşar, 5'li sekme çubuğu iki satıra iner. Paragraf ise akışkandır,
+     büyüdükçe rahatlar.
+     ÇÖZÜM — tek denetim, İKİ kazanç:
+       --tipo-kok = 1 + (fs-1) * KAPSAM_SONUMU   → kök punto = TÜM uygulama
+       --tipo-oku = fs / --tipo-kok               → okuma yüzeylerine EK çarpan
+     Okuma yüzeyi kökün üstüne bindiği için net kazancı tam fs olur; arayüz
+     kökte kalır. fs=1.25'te okuma %25, arayüz %12,5 büyür.
+     KAPSAM_SONUMU=0.5 seçildi: arayüzü tümden dondurmak (0) görme rahatlığı
+     isteyen kullanıcıya haksızlık, sönümsüz (1) düzeni bozuyor — yarı kazanç
+     ikisini de karşılıyor. */
+  var KAPSAM_SONUMU = 0.5;    // arayüz (kart, form, düğme, etiket) — akışkan
+  var NAV_SONUMU = 0.25;      // sabit yapı (sekme çubuğu) — akmıyor, daha çok sönümlü
+  function kokKazanci(fs){ return 1 + (fs - 1) * KAPSAM_SONUMU; }
+  function navKazanci(fs){ return 1 + (fs - 1) * NAV_SONUMU; }
   window.tipografiUygula = function(t){
     var kok = document.documentElement;
     for(var k in SECENEK){
       if(!Object.prototype.hasOwnProperty.call(SECENEK, k)) continue;
+      if(k === 'fs') continue;   // fs AYRI: tek degerden iki jeton dogar
       var css = SECENEK[k].css;
       var v = (t && t[k] != null) ? t[k] : null;
       /* removeProperty ŞART: değer silinince jeton ORTADAN KALKMALI ki CSS'teki
          var() yedeği yeniden devreye girsin. Boş dize yazmak yetmez. */
       if(v === null){ kok.style.removeProperty(css); continue; }
       kok.style.setProperty(css, k === 'font' ? FONTLAR[v] : String(v));
+    }
+    var f = (t && t.fs != null) ? t.fs : null;
+    if(f === null){
+      kok.style.removeProperty('--tipo-kok');
+      kok.style.removeProperty('--tipo-oku');
+      kok.style.removeProperty('--tipo-nav');
+    }else{
+      /* --tipo-oku ve --tipo-nav KÖKÜN ÜSTÜNE biner (ikisi de rem cinsinden
+         ölçülen kuralda çarpan). Bu yüzden ikisi de NET hedefin köke ORANIdır:
+         net = kok * telafi. Yuvarlama 6 basamak — 1.25'te sapma < 0.001 px. */
+      var g = kokKazanci(f), yuvarla = x => Math.round(x * 1e6) / 1e6;
+      kok.style.setProperty('--tipo-kok', String(g));
+      kok.style.setProperty('--tipo-oku', String(yuvarla(f / g)));
+      kok.style.setProperty('--tipo-nav', String(yuvarla(navKazanci(f) / g)));
     }
   };
   window.tipografiYaz = function(k, v){
@@ -246,7 +282,12 @@ function _iz(yer, e){ if(window.__KK_IZ) console.warn('[kk]', yer, e); }
      --sans artık bilinçli olarak bir SERIF gövde fontuna işaret eder (kasıtlı,
      görsel dil tamamen serif). Gömülü dosya cihaz font temasını atlar. */
   --serif:'Cormorant Garamond','Iowan Old Style',Georgia,serif;
-  --sans:'Lora',Georgia,'Times New Roman',serif;
+  /* v105: gövde ailesi ARTIK KAYNAĞINDA kullanıcı ayarına bağlı. --sans 11
+     kuralda + body'de geçtiği için tek satır tüm uygulamayı çeviriyor; v104'te
+     3 okuma yüzeyine tek tek yazılan --tipo-font gereksizleşti (geri alındı).
+     --serif (28 kural, başlıklar) BİLEREK dışarıda: o Pinakes'in kimliği,
+     okuma konforu ayarı değil. */
+  --sans:var(--tipo-font, 'Lora',Georgia,'Times New Roman',serif);
 }
 /* PALET A GECE — "Amber kâğıt" (v57). Açık temanın parşömen kimliğinin gece
    karşılığı; ESKİ karanlık blok v25'ten (a81f31d) kalmıştı ve Palet A v41'de
@@ -275,7 +316,15 @@ function _iz(yer, e){ if(window.__KK_IZ) console.warn('[kk]', yer, e); }
   --golge-orta:rgba(0,0,0,.45); --golge-guclu:rgba(0,0,0,.55);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html{font-size:16px;font-style:normal}
+/* v105 TİPOGRAFİ KAPSAMI — kök dayanak noktası.
+   ÖLÇÜLDÜ: 156 font-size bildiriminin 154'ü rem, ve font DIŞI rem ölçüsü SIFIR
+   (padding/margin/gap/radius/height hepsi px; medya sorguları da px, yani
+   kırılma noktaları OYNAMAZ). Bu yüzden kök punto çarpanı YALNIZ metni
+   büyütür — kutu düzeni yerinde kalır. Uygulamanın tamamı (liste, kart,
+   düğme, form, menü, detay) buradan ölçeklenir.
+   --tipo-kok SÖNÜMLÜ kazançtır (bkz. tipografi boot KAPSAM_SONUMU): arayüz
+   metni okuma metniyle AYNI oranda büyümez. */
+html{font-size:calc(16px * var(--tipo-kok, 1));font-style:normal}
 /* font-style:normal AÇIKÇA yazılır (gövde + tüm form öğeleri): italik yalnız
    bilinçli alıntı yüzeylerinde yaşar (.ga-metin, .not-kart.alinti, .tk-metin,
    .fa-kesisim-metin). Form öğeleri font'u miras almadığı için ayrıca alır. */
@@ -527,8 +576,13 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
   padding-bottom:env(safe-area-inset-bottom)}
 /* Ciltli sekme dili (v42): küçük büyük-harf etiket + ikon; aktif = altın metin
    + etiketin altında 1px altın çizgi. Harf aralığı .05em (Lora küçük punto ayarı). */
+/* v105 ÜÇÜNCÜ ROL — SABİT YAPI. Sekme çubuğu 5 yuvalı, etiketler nowrap ve
+   akmıyor: ÖLÇÜLDÜ, 320px ekranda arayüz kazancıyla (fs=1.25 → kök 1.125)
+   çubuk 329px oluyor ve son sekme kesiliyor. Bu yüzden nav KENDİ kazancını
+   taşır (--tipo-nav, çeyrek oran) — kartlar/formlar akışkan olduğu için tam
+   arayüz kazancında kalır, yalnız akamayan bileşen daha çok sönümlenir. */
 .nav-btn{flex:1;padding:9px 0 10px;display:flex;flex-direction:column;align-items:center;gap:3px;
-  color:var(--muted2);font-size:.66rem;letter-spacing:.05em;text-transform:uppercase}
+  color:var(--muted2);font-size:calc(.66rem * var(--tipo-nav, 1));letter-spacing:.05em;text-transform:uppercase}
 .nav-btn .n-ikon{line-height:1;display:flex}
 .nav-btn .n-etiket{border-bottom:1px solid transparent;padding-bottom:2px;white-space:nowrap}
 .nav-btn.active{color:var(--brass)}
@@ -643,7 +697,9 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
    (.not-kart.alinti kalıbının büyütülmüşü), gövde bir punto iri ve daha açık
    satır aralığıyla "günün" ağırlığını taşır. */
 .gunun-alintisi{border-left:1px solid var(--brass);padding:2px 0 2px 16px;margin:0}
-.ga-metin{font-family:var(--sans);font-style:italic;font-size:1.15rem;line-height:1.7}
+/* v105: gunun alintisi OKUMA katmani — okunmak icin duran metin (etiket degil) */
+.ga-metin{font-family:var(--sans);font-style:italic;font-size:calc(1.15rem * var(--tipo-oku,1));
+  line-height:calc(1.7 * var(--tipo-lh,1));max-width:var(--tipo-olcu,none)}
 .ga-kaynak{font-size:.78rem;color:var(--muted);margin-top:10px;letter-spacing:.02em}
 #alintiArama{margin-bottom:4px}
 
@@ -801,7 +857,7 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
    olcu (satır uzunluğu) em cinsinden — boyutla birlikte esner, satırdaki
    KARAKTER sayısı sabit kalır. 545 kelimelik özetlerde asıl kazanç budur. */
 .oz-metin,.onto-metin,.ts-govde{line-height:calc(1.62 * var(--tipo-lh,1));
-  font-size:calc(.95rem * var(--tipo-fs,1));font-family:var(--tipo-font,var(--sans));
+  font-size:calc(.95rem * var(--tipo-oku,1));font-family:var(--sans);
   max-width:var(--tipo-olcu,none);overflow-wrap:anywhere}
 .ts-govde{white-space:pre-wrap}
 .oz-metin p,.onto-metin p{margin:0 0 var(--tipo-pb,.95em)}
@@ -857,15 +913,15 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
 .not-kart{background:transparent;border:none;border-radius:0;box-shadow:none;
   padding:12px 0;margin-top:0;position:relative;border-bottom:1px solid var(--cizgi)}
 .not-kart.alinti{border-left:1px solid var(--brass);padding-left:14px}
-.not-kart.alinti .not-metin{font-family:var(--tipo-font,var(--sans));font-style:italic}
+.not-kart.alinti .not-metin{font-family:var(--sans);font-style:italic}
 /* v104: not gövdesi de mdMini'den geçiyor → pre-wrap KALKTI. oz-metin'in
    v101'de yaptığının aynısı: satır sonlarının sahibi artık mdMini (tek satır
    sonu = <br>, boş satır = paragraf ayracı). ÖLÇÜLDÜ: mdMini çıktısında literal
    satır sonu SIFIR, yani pre-wrap kalsaydı da satır sonu ikilenmezdi —
    kaldırma gerekçesi mdMini yüzeylerinin TEK kural altında toplanması.
    Bedeli: satır içi arka arkaya boşluklar artık tek boşluğa iner. */
-.not-metin{font-size:calc(.9rem * var(--tipo-fs,1));line-height:calc(1.55 * var(--tipo-lh,1));
-  font-family:var(--tipo-font,var(--sans));max-width:var(--tipo-olcu,none);
+.not-metin{font-size:calc(.9rem * var(--tipo-oku,1));line-height:calc(1.55 * var(--tipo-lh,1));
+  font-family:var(--sans);max-width:var(--tipo-olcu,none);
   overflow-wrap:break-word;padding-right:26px}
 /* <p> marjı ŞART: bu kural olmasaydı tarayıcının 1em üst marjı ilk paragrafa
    da binerdi — asıl "çift boşluk" riski buydu, pre-wrap değil. */
@@ -1125,7 +1181,10 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
 .tk-baslik-not{flex-basis:100%;font-weight:400;color:var(--muted2);font-size:.75rem;letter-spacing:0}
 .tk-kart{background:transparent;border:none;border-left:1px solid var(--brass);
   border-radius:0;box-shadow:none;padding:2px 0 2px 16px}
-.tk-metin{font-family:var(--sans);font-style:italic;font-size:1.02rem;line-height:1.65;white-space:pre-wrap;overflow-wrap:break-word}
+/* v105: tekrar karti da OKUMA katmani (ga-metin ile ayni gerekce) */
+.tk-metin{font-family:var(--sans);font-style:italic;font-size:calc(1.02rem * var(--tipo-oku,1));
+  line-height:calc(1.65 * var(--tipo-lh,1));max-width:var(--tipo-olcu,none);
+  white-space:pre-wrap;overflow-wrap:break-word}
 .tk-kaynak{font-size:.78rem;color:var(--muted);margin-top:10px;letter-spacing:.02em}
 .tk-git{color:var(--brass);margin-left:6px;font-size:.78rem}
 .tk-eylem{display:flex;gap:18px;margin-top:14px;flex-wrap:wrap;align-items:center}
@@ -1345,7 +1404,7 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
            türesin (tema düğmelerinde de aynı kalıp). -->
       <section class="ay-bolum" id="ayBolumTipografi">
         <div class="ay-bolum-bas"><span class="kicker">Okuma tipografisi</span></div>
-        <p class="ay-not">Özet, ontoloji, not ve alıntı metinlerinin okunma ölçüsü — kütüphanende ortalama 545 kelimelik özetler var, bu ayarlar onları rahat okumak için. Kitap listesi, kartlar ve başlıklar etkilenmez. Aşağıdaki örnek gerçek okuma yüzeyidir: değişiklik anında burada görünür.</p>
+        <p class="ay-not"><b>Yazı boyutu</b> ve <b>yazı ailesi</b> uygulamanın tamamını etkiler — liste, kart, düğme, form, menü, detay. Boyut kör çarpan değil: okuma metni tam oranda, arayüz metni yarı oranda büyür, böylece sekme çubuğu ve düğmeler taşmaz. <b>Satır yüksekliği</b>, <b>paragraf arası</b> ve <b>satır uzunluğu</b> yalnız okuma metinlerine (özet, ontoloji, not, alıntı) iner — bunlar akan metnin ölçüleridir, tek satırlık etikette karşılığı yok. Aşağıdaki örnek gerçek okuma yüzeyidir.</p>
         <div class="tp-onizleme" id="tpOnizleme"></div>
         <div id="tpKontrol"></div>
         <div class="ay-eylem">

@@ -10,8 +10,12 @@
    - VARSAYILAN = BUGÜNKÜ GÖRÜNÜM. Ayara dokunmayan kullanıcıda tek piksel
      değişmez; sıfırlama tabana BİREBİR döner ve kök elemanda --tipo-* jetonu
      bırakmaz. Bu vaka havuzun varlık sebebidir — kırılırsa sessiz regresyon.
-   - Her ayar DÖRT yüzeyi birden tutar (özet · ontoloji · not · alıntı). Liste
-     ve kartlar kapsam DIŞI (orada ölçü tasarımın ritmi, okuma değil).
+   - v105 KAPSAM: boyut ve aile TÜM uygulamayı tutar; satır yüksekliği,
+     paragraf arası ve satır uzunluğu YALNIZ okuma yüzeylerine iner (akan
+     metnin ölçüleri — tek satırlık etikette karşılığı yok).
+   - v105 ÜÇ KADEME (kör çarpan DEĞİL): okuma tam kazanç · arayüz yarı
+     (KAPSAM_SONUMU .5) · sekme çubuğu çeyrek (NAV_SONUMU .25). Sekme çubuğu
+     5 yuvalı ve nowrap: 320px'te yarı kazanç bile son sekmeyi kesiyordu.
    - fs/lh ÇARPAN: özet (.95rem/1.62) ile not (.9rem/1.55) arasındaki oran
      korunur, tek mutlak değere ezilmez.
    - v104 markdown tutarlılığı: not ve alıntı gövdesi de mdMini'den geçer
@@ -146,7 +150,7 @@ test.describe('G104 okuma tipografisi', () => {
     expect(await olcOnto(page)).toEqual(ontoTaban);
     expect(await page.evaluate(() => localStorage.getItem('kk_tipografi_v1'))).toBe(null);
     const kalan = await page.evaluate(() =>
-      ['--tipo-fs', '--tipo-lh', '--tipo-pb', '--tipo-olcu', '--tipo-font']
+      ['--tipo-kok', '--tipo-oku', '--tipo-lh', '--tipo-pb', '--tipo-olcu', '--tipo-font']
         .filter(j => document.documentElement.style.getPropertyValue(j) !== ''));
     expect(kalan, 'kök elemanda --tipo-* jetonu kalmamalı').toEqual([]);
   });
@@ -189,11 +193,11 @@ test.describe('G104 okuma tipografisi', () => {
       window.tipografiHamYaz('{"fs":99,"font":"comic sans","olcu":"calc(kotu)","lh":1.12}'));
     expect(await page.evaluate(() => window.tipografiOku())).toEqual({ lh: 1.12 });
     const jetonlar = await page.evaluate(() => ({
-      fs: document.documentElement.style.getPropertyValue('--tipo-fs'),
+      kok: document.documentElement.style.getPropertyValue('--tipo-kok'),
       font: document.documentElement.style.getPropertyValue('--tipo-font'),
       olcu: document.documentElement.style.getPropertyValue('--tipo-olcu')
     }));
-    expect(jetonlar).toEqual({ fs: '', font: '', olcu: '' });
+    expect(jetonlar).toEqual({ kok: '', font: '', olcu: '' });
     /* bozuk gövde hiç yazmamalı */
     expect(await page.evaluate(() => window.tipografiHamYaz('bu json degil'))).toBe(false);
   });
@@ -207,5 +211,109 @@ test.describe('G104 okuma tipografisi', () => {
     expect(await page.locator('#tpOnizleme .oz-metin').count()).toBe(1);
     await page.click('[data-act="ayar-kapat"]');
     expect(await page.locator('#tpOnizleme .oz-metin').count(), 'kapanınca silinir').toBe(0);
+  });
+});
+
+test.describe('G104b kapsam ve sönüm (v105)', () => {
+  /* Kok olceginin dokundugu temsili yuzeyler: gorunur ve her zaman var. */
+  const KADEME = {
+    kok: 'html',
+    govde: 'body',
+    kartBaslik: '#liste .kart .kart-baslik',
+    kicker: '#panel-raf .kicker',
+    navEtiket: '.nav-btn .n-etiket'
+  };
+  const px = (page, sec) => page.evaluate(s => {
+    const e = document.querySelector(s);
+    return e ? parseFloat(getComputedStyle(e).fontSize) : null;
+  }, sec);
+
+  async function liste(page) {
+    await tohumla(page, [sahteKitap({ ad: 'Kapsam Kitabi', yazar: 'Yazar' })]);
+    await rafAc(page);
+  }
+
+  test('(g) boyut TÜM uygulamayı tutar — kök, gövde, kart, kicker', async ({ page }) => {
+    await liste(page);
+    const once = {};
+    for (const [ad, sec] of Object.entries(KADEME)) once[ad] = await px(page, sec);
+    await page.evaluate(() => window.tipografiYaz('fs', 1.25));
+    for (const ad of ['kok', 'govde', 'kartBaslik', 'kicker']) {
+      const sonra = await px(page, KADEME[ad]);
+      expect(sonra / once[ad], ad + ' arayüz kazancı').toBeCloseTo(1.125, 3);
+    }
+  });
+
+  test('(h) KÖR ÇARPAN DEĞİL: okuma > arayüz > sekme çubuğu', async ({ page }) => {
+    await liste(page);
+    const navOnce = await px(page, KADEME.navEtiket);
+    const kartOnce = await px(page, KADEME.kartBaslik);
+    const okuOnce = await page.evaluate(() => {
+      const d = document.createElement('div'); d.className = 'oz-metin';
+      document.body.appendChild(d);
+      const v = parseFloat(getComputedStyle(d).fontSize); d.remove(); return v;
+    });
+    await page.evaluate(() => window.tipografiYaz('fs', 1.25));
+    const navSonra = await px(page, KADEME.navEtiket);
+    const kartSonra = await px(page, KADEME.kartBaslik);
+    const okuSonra = await page.evaluate(() => {
+      const d = document.createElement('div'); d.className = 'oz-metin';
+      document.body.appendChild(d);
+      const v = parseFloat(getComputedStyle(d).fontSize); d.remove(); return v;
+    });
+    const okuK = okuSonra / okuOnce, arayuzK = kartSonra / kartOnce, navK = navSonra / navOnce;
+    expect(okuK, 'okuma TAM kazanç').toBeCloseTo(1.25, 3);
+    expect(arayuzK, 'arayüz yarı kazanç').toBeCloseTo(1.125, 3);
+    expect(navK, 'sekme çubuğu çeyrek kazanç').toBeCloseTo(1.0625, 3);
+    expect(okuK).toBeGreaterThan(arayuzK);
+    expect(arayuzK).toBeGreaterThan(navK);
+  });
+
+  test('(i) 320px’te en ağır ayar sekme çubuğunu taşırmaz', async ({ page }) => {
+    await liste(page);
+    await page.setViewportSize({ width: 320, height: 700 });
+    await page.evaluate(() => { window.tipografiYaz('fs', 1.25); window.tipografiYaz('lh', 1.25); });
+    const d = await page.evaluate(() => {
+      const n = document.querySelector('nav');
+      const b = [...n.querySelectorAll('.nav-btn')];
+      return {
+        tasma: n.scrollWidth - n.clientWidth,
+        satir: new Set(b.map(x => Math.round(x.getBoundingClientRect().top))).size,
+        belge: document.documentElement.scrollWidth - document.documentElement.clientWidth
+      };
+    });
+    expect(d.tasma, 'sekme çubuğu taşması').toBeLessThanOrEqual(0);
+    expect(d.satir, 'sekme çubuğu TEK satır').toBe(1);
+    expect(d.belge, 'belge yatay taşması').toBeLessThanOrEqual(0);
+  });
+
+  test('(j) yazı ailesi TÜM gövdeyi çevirir, başlık ailesi (--serif) sabit kalır', async ({ page }) => {
+    await liste(page);
+    const serifOnce = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--serif').trim());
+    const govdeOnce = await page.evaluate(() =>
+      getComputedStyle(document.body).fontFamily.split(',')[0].replace(/['"]/g, ''));
+    expect(govdeOnce).toBe('Lora');
+    await page.evaluate(() => window.tipografiYaz('font', 'sistem'));
+    const govdeSonra = await page.evaluate(() =>
+      getComputedStyle(document.body).fontFamily.split(',')[0].replace(/['"]/g, ''));
+    expect(govdeSonra, 'gövde ailesi uygulama geneli değişti').toBe('system-ui');
+    const serifSonra = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--serif').trim());
+    expect(serifSonra, 'başlık ailesi DEĞİŞMEZ').toBe(serifOnce);
+  });
+
+  test('(k) okuma-özel ayarlar arayüze SIZMAZ', async ({ page }) => {
+    await liste(page);
+    const once = await page.evaluate(() => {
+      const k = document.querySelector('#liste .kart .kart-baslik'), c = getComputedStyle(k);
+      return { lh: c.lineHeight, mw: c.maxWidth };
+    });
+    await page.evaluate(() => { window.tipografiYaz('lh', 1.25); window.tipografiYaz('olcu', '34em'); });
+    const sonra = await page.evaluate(() => {
+      const k = document.querySelector('#liste .kart .kart-baslik'), c = getComputedStyle(k);
+      return { lh: c.lineHeight, mw: c.maxWidth };
+    });
+    expect(sonra, 'satır yüksekliği ve satır uzunluğu kartlara inmemeli').toEqual(once);
   });
 });
