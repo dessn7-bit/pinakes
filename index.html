@@ -963,6 +963,17 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
 .ol-item img{width:32px;height:46px;object-fit:cover;border-radius:4px;background:var(--surface2);flex:0 0 32px}
 .ol-item .oi-ad{font-size:.85rem;line-height:1.3}
 .ol-item .oi-alt{font-size:.75rem;color:var(--muted2);margin-top:2px}
+/* ---------- BASKI KİMLİĞİ (bs-, v108) ----------
+   Arama listesi ad + yazar gösteriyordu; aynı eserin Türkçe ve yabancı
+   baskıları ayırt edilemiyordu, hangisini seçtiğin ancak form dolduktan
+   sonra anlaşılıyordu. Bu satır baskıyı ayırt eden ÜÇ olguyu birlikte
+   taşır: dil · ISBN ülke öneki · yayınevi. Bilinmeyen alan SESSİZ KALMAZ,
+   "yok" der — v102 dersi: seçtikten sonra "alan boş kaldı" demek geç.
+   .bs-uyari = v102 kapılarının SEÇİMDEN ÖNCEKİ ön izlemesi. */
+.ol-item .bs-kimlik{font-size:.75rem;color:var(--muted);margin-top:3px;line-height:1.45}
+.ol-item .bs-kimlik b{font-weight:600;color:var(--paper)}
+.ol-item .bs-yok{font-style:italic;color:var(--muted2)}
+.ol-item .bs-uyari{font-size:.72rem;color:var(--drop);margin-top:3px;line-height:1.4}
 .ol-durum{font-size:.75rem;color:var(--muted2);margin-top:6px}
 .kapak-onizle{display:flex;align-items:center;gap:10px;margin-top:8px}
 .kapak-onizle img{width:40px;height:58px;object-fit:cover;border-radius:4px;border:1px solid var(--border)}
@@ -1778,12 +1789,10 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
       <div>
         <label for="f-dil">Dil</label>
         <input id="f-dil" list="dilListesi" placeholder="tr" autocomplete="off">
-        <datalist id="dilListesi">
-          <option value="tr">Türkçe</option><option value="en">İngilizce</option>
-          <option value="de">Almanca</option><option value="fr">Fransızca</option>
-          <option value="ru">Rusça</option><option value="es">İspanyolca</option>
-          <option value="it">İtalyanca</option><option value="ar">Arapça</option>
-        </datalist>
+        <!-- v108: seçenekler DIL_ADI'ndan üretilir (dilAdiListeDoldur). Burada
+             8 satırlık ikinci bir dil sözlüğü duruyordu; arama sonucundaki
+             baskı kimliği aynı adları kullanıyor — iki liste, tek gerçek. -->
+        <datalist id="dilListesi"></datalist>
       </div>
     </div>
 
@@ -3160,9 +3169,91 @@ function trPuan(a){
   if(String(a.kaynak || '').indexOf('1000Kitap') >= 0) p += 2;
   if(TRC.test(a.ad || '')) p += 2;
   if(TRC.test(a.yayinevi || '') || TRC.test(a.yazar || '')) p += 1;
-  const isbn = String(a.isbn || '').replace(/[^0-9X]/gi, '');
-  if(/^(978605|978625|978975|9789944)/.test(isbn)) p += 1;
+  /* v108: Türkiye ISBN grubu artık v102 tablosundan okunuyor (zengin.js
+     isbnUlke). Burada ikinci bir liste (elle yazılmış regex) duruyordu —
+     iki otorite, tek gerçek. AĞIRLIK DEĞİŞMEDİ (+1, en zayıf terim); tek
+     fark tanınan ISBN kümesinin genişlemesi: 979 önekli ve tireli/boşluklu
+     yazılmış Türk ISBN'leri eskiden puan alamıyordu. */
+  const Z = window.__zengin;
+  if(Z && Z.isbnUlke && Z.isbnUlke(a.isbn) === 'tr') p += 1;
   return p;
+}
+/* ---------- BASKI KİMLİĞİ ve KAPI ÖN İZLEMESİ (v108) ----------
+   DÜRÜSTLÜK KURALI: hiçbir alan uydurulmaz. Worker ucu (/ara → Goodreads +
+   1000Kitap) sözleşme gereği dil, ISBN ve yayınevi TAŞIMIYOR; o adaylarda
+   satır bunu açıkça söyler. Google Books üçünü de verir. */
+const DIL_ADI = { tr:'Türkçe', en:'İngilizce', de:'Almanca', fr:'Fransızca',
+  es:'İspanyolca', it:'İtalyanca', ru:'Rusça', ja:'Japonca', nl:'Felemenkçe',
+  sv:'İsveççe', pt:'Portekizce', ar:'Arapça', hu:'Macarca', el:'Yunanca',
+  fa:'Farsça', zh:'Çince', la:'Latince', ku:'Kürtçe', az:'Azerice' };
+function dilAdi(kod){
+  const k = String(kod || '').trim().toLowerCase().slice(0, 2);
+  if(!k) return '';
+  return DIL_ADI[k] || k.toUpperCase();   // sözlükte yoksa kodu göster, UYDURMA
+}
+/* Formdaki dil datalist'i de AYNI sözlükten doldurulur — iki liste bakımı
+   ayrışırdı (kaynak: v103'ün "kural tekilleştirme" dersi). */
+function dilAdiListeDoldur(){
+  const d = document.getElementById('dilListesi');
+  if(!d) return;
+  d.innerHTML = Object.keys(DIL_ADI)
+    .map(k => '<option value="' + k + '">' + esc(DIL_ADI[k]) + '</option>').join('');
+}
+/* Formda DURAN künye. v102 kapıları "kayıt ↔ aday" kıyası yapar ve YALNIZ
+   ikisi de dolu alanları karşılaştırır — yeni kitapta form boştur, kapılar
+   sessiz kalır; düzenlemede (ya da kullanıcı alanları elle doldurduğunda)
+   gerçek çelişkiyi yakalar. */
+function formKunyesi(){
+  const v = id => { const e = document.getElementById(id); return e ? String(e.value || '').trim() : ''; };
+  return { yazar: v('f-yazar'), yayinevi: v('f-yayinevi'), isbn: v('f-isbn'),
+    dil: v('f-dil'), sayfa: parseInt(v('f-sayfa')) || 0, yil: parseInt(v('f-yil')) || 0 };
+}
+function adayCilt(a){
+  return { kaynak: a.kaynak || '', yayinevi: a.yayinevi || '', sayfa: a.sayfa || 0,
+    yil: a.yil || 0, isbn: a.isbn || '', dil: String(a.dil || '').toLowerCase().slice(0, 2),
+    yazarlar: a.yazar ? [a.yazar] : [] };
+}
+/* v102 kapılarının ÖN İZLEMESİ. Motor zengin.js'te; burada KOPYASI YOK —
+   zengin.js yüklenmemişse uyarı ÜRETİLMEZ (uydurma red yapmaktansa susmak).
+   Uyarı SÜZME DEĞİL: çelişkili aday listede kalır ve seçilebilir (v95 kuralı,
+   rafta yabancı baskı da var). */
+function adayUyarilari(a){
+  const Z = window.__zengin;
+  if(!Z || !Z.ciltUyumsuzlugu) return [];
+  const c = adayCilt(a), k = formKunyesi(), u = [];
+  const m = Z.ciltUyumsuzlugu(k, c, false);          // kayıt ↔ aday
+  if(m && m !== 'aday yok') u.push(m);
+  if(c.yayinevi){
+    const y = Z.yayineviGecersiz(k, c, c.yayinevi);   // yayınevi alanına yazar adı
+    if(y) u.push(y);
+  }
+  if(c.isbn){
+    const i = Z.isbnGecersiz(k, c.isbn, c.yayinevi);  // sağlama + ISBN öneki ↔ yayınevi
+    if(i) u.push(i);
+    /* adayın KENDİ içinde çelişki: ISBN grubu bir dili, alan başka dili söylüyor */
+    const g = Z.isbnUlke(c.isbn);
+    if(g && c.dil && g !== c.dil)
+      u.push('ISBN öneki adayın diliyle çelişiyor (ISBN: ' + g + ' · dil: ' + c.dil + ')');
+  }
+  return u;
+}
+function baskiKimligi(a){
+  const Z = window.__zengin;
+  const grup = (Z && Z.isbnGrup) ? Z.isbnGrup(a.isbn) : { on: '', onek: '', dil: '' };
+  const isbn = String(a.isbn || '').replace(/[^0-9Xx]/g, '');
+  const dil = dilAdi(a.dil);
+  /* üçü birden yoksa TEK dürüst cümle — üç ayrı "yok" gürültü olurdu */
+  if(!dil && !isbn && !a.yayinevi)
+    return '<span class="bs-yok">Baskı bilgisi yok — bu kaynak dil, ISBN ve yayınevi taşımıyor</span>';
+  const p = [];
+  if(dil) p.push('<b>' + esc(dil) + '</b>');
+  else if(grup.dil) p.push('<b>' + esc(dilAdi(grup.dil)) + '</b> <span class="bs-yok">(ISBN\'den)</span>');
+  else p.push('<span class="bs-yok">dil bilinmiyor</span>');
+  if(grup.onek) p.push('ISBN ' + grup.on + '-' + grup.onek);
+  else if(isbn) p.push('ISBN ' + esc(isbn.slice(0, 3)) + '…');
+  else p.push('<span class="bs-yok">ISBN yok</span>');
+  p.push(a.yayinevi ? esc(a.yayinevi) : '<span class="bs-yok">yayınevi yok</span>');
+  return p.join(' · ');
 }
 async function canliAra(q){
   sonAramaMetni = q;
@@ -3217,13 +3308,22 @@ async function canliAra(q){
          : 'Öneri bulunamadı — elle devam edebilirsin.');
     sEl.innerHTML = ''; return; }
   dEl.textContent = 'Birine tıkla, formu doldurayım:';
-  sEl.innerHTML = adaylar.map((a, i) => `<button class="ol-item" data-act="ol-sec" data-i="${i}">
+  /* v108: satır İKİ katmanlı oldu. oi-alt = eserin künyesi (yazar/yıl/sayfa/
+     kaynak), bs-kimlik = BASKININ kimliği (dil · ISBN öneki · yayınevi).
+     Yayınevi ve dil oi-alt'tan bs-kimlik'e TAŞINDI: üçü ayrı ayrı serpiştirilmiş
+     hâlde baskıyı ayırt etmeye yetmiyordu, yan yana durunca yetiyor. */
+  sEl.innerHTML = adaylar.map((a, i) => {
+    const uyari = adayUyarilari(a);
+    return `<button class="ol-item" data-act="ol-sec" data-i="${i}">
       ${a.kapak ? `<img src="${escAttr(a.kapak)}" alt="" loading="lazy">`
         : '<div style="width:32px;height:46px;background:var(--surface2);border-radius:3px;flex:0 0 32px"></div>'}
       <div><div class="oi-ad">${esc(a.ad)}</div>
-      <div class="oi-alt">${esc([a.yazar, a.yayinevi, a.yil, a.sayfa ? a.sayfa + ' sf' : '', a.dil, a.kaynak]
-        .filter(Boolean).join(' · '))}</div></div>
-    </button>`).join('');
+      <div class="oi-alt">${esc([a.yazar, a.yil, a.sayfa ? a.sayfa + ' sf' : '', a.kaynak]
+        .filter(Boolean).join(' · '))}</div>
+      <div class="bs-kimlik">${baskiKimligi(a)}</div>
+      ${uyari.length ? `<div class="bs-uyari">${uyari.map(m => '⚠ ' + esc(m)).join('<br>')}</div>` : ''}
+      </div>
+    </button>`; }).join('');
   sEl._adaylar = adaylar;
 }
 function araNorm(s){ return String(s||'').toLocaleLowerCase('tr').replace(/[^a-z0-9çğıöşü]+/g,''); }
@@ -3305,6 +3405,7 @@ function formAc(id){
   document.getElementById('f-sahiplik').value = k ? (k.sahiplik || 'sahip') : 'sahip';
   listeDoldur('cevirmenListesi', 'cevirmen');
   listeDoldur('seriListesi', 'seri');
+  dilAdiListeDoldur();      // v108: dil seçenekleri DIL_ADI'ndan (tek sözlük)
   document.getElementById('f-etiket').value = k ? (k.etiketler||[]).join(', ') : '';
   document.getElementById('f-bas').value = k ? (k.baslamaTarihi||'') : '';
   document.getElementById('f-bit').value = k ? (k.bitisTarihi||'') : '';

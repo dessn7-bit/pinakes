@@ -396,15 +396,21 @@
     ['963', 'hu'], ['972', 'pt'], ['977', 'ar'], ['987', 'es'],
     ['0', 'en'], ['1', 'en'], ['2', 'fr'], ['3', 'de'], ['4', 'ja'], ['5', 'ru'],
     ['84', 'es'], ['88', 'it'], ['90', 'nl'], ['91', 'sv']];
-  function isbnUlke(isbn){
+  /* v108: arama ekranı grup ÖNEKİNİ de gösteriyor ("ISBN 978-605"), yalnız
+     dili değil. Tarama tek yerde kaldı — isbnUlke artık bunun dil alanı.
+     Önce arama ekranında ikinci bir Türkiye-ISBN listesi vardı (trPuan'ın
+     kendi regex'i); o liste silindi, tek otorite bu tablo. */
+  function isbnGrup(isbn){
+    const bos = { on: '', onek: '', dil: '' };
     const t = String(isbn || '').replace(/[^0-9Xx]/g, '');
-    if(t.length !== 13 || (t.slice(0, 3) !== '978' && t.slice(0, 3) !== '979')) return '';
+    if(t.length !== 13 || (t.slice(0, 3) !== '978' && t.slice(0, 3) !== '979')) return bos;
     const g = t.slice(3);
     let en = '', dil = '';
     for(const [onek, d] of ISBN_GRUP)
       if(g.indexOf(onek) === 0 && onek.length > en.length){ en = onek; dil = d; }
-    return dil;
+    return { on: t.slice(0, 3), onek: en, dil };
   }
+  function isbnUlke(isbn){ return isbnGrup(isbn).dil; }
   /* Yayınevi Türkçe mi — ülke veritabanı yok, GÜVENLİ yönde çalışır: yalnız
      "bu yayınevi Türk" diyebildiğimizde çelişki aranır. Ters yön (Alman yayınevi
      + Türk ISBN'i) BİLİNMEZ sayılır, red üretmez. */
@@ -2862,7 +2868,7 @@
        elle kaydedildiğinde aynı yoldan geçip temizlenir. */
     metinTemizle, metinCoz, varlikCoz, mojibakeOnar, bozukMetin,
     ciltGB, ciltWorker, ciltUyumsuzlugu, yayineviGecersiz, isbnGecersiz,
-    isbnUlke, yayineviTurkMu, beklenenDil, kunyeKatla, metinCelisir,
+    isbnUlke, isbnGrup, yayineviTurkMu, beklenenDil, kunyeKatla, metinCelisir,
     ARALIK_MS, ALANLAR, KUNYE, KUYRUK_ANAHTAR, OTO_DENEME_ANAHTAR, OTO_ATANAN_ANAHTAR };
   /* v100: kütüphane dosyası (tam değiştirme) test kancaları — hiçbiri yazmaz */
   window.__ky = { dogrula: kyDogrula, planKur: kyPlanKur, iz: kyIz, anlikOku: kyAnlikOku,
