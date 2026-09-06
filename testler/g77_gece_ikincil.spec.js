@@ -14,7 +14,7 @@
     enjekte eder ve süpürmenin onu YAKALADIĞINI kanıtlar — duyarlılığı
     sınanmamış "0 kaçak" delil değildir, g49 dersi.) */
 const { test, expect, tohumla, sahteKitap, kameraTaklit, bugunISO,
-  rafaGec, ayarlarAc, tehlikeAc, ayrintilarAc } = require('./yardim');
+  rafaGec, ayarlarAc, tehlikeAc, ayrintilarAc, dosyadanYukle } = require('./yardim');
 
 /* ---------- g49 fixture'ı (BİREBİR) ---------- */
 const BUGUN = bugunISO(), DUN = bugunISO(-1);
@@ -407,8 +407,7 @@ test.describe('G77 karanlık tema — ikincil yüzeyler', () => {
       sahteKitap({ ad: 'Palto', yazar: 'Nikolai Gogol' })]);
     page.__agAyar.turler = TURLER56;
     await ayarlarAc(page);
-    await page.click('[data-act="zg-tur-ice"]');
-    await page.setInputFiles('#zgTurDosya', turDosya([
+    await dosyadanYukle(page, turDosya([
       { ad: 'Persler', yazar: 'Aeschylus', tur: 'Tiyatro' },
       { ad: 'Palto', yazar: 'Nikolai Gogol', tur: 'Hikaye (Öykü)' }]));
     await expect(page.locator('#zgTurIceOrtu')).toHaveClass(/acik/);

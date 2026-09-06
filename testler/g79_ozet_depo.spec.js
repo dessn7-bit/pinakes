@@ -20,7 +20,8 @@
    - Ayarlar ▸ Depolama'da özet kartı; %80 kota eşiğinde uyarı (dolmadan önce).
    (Mutasyon: özet metnini ana PUT gövdesine geri koy → (C) kırmızı; göç
     adımını kaldır → (B)/g78(a) kırmızı.) */
-const { test, expect, tohumla, sahteKitap, bugunISO, rafAc, ayarlarAc } = require('./yardim');
+const { test, expect, tohumla, sahteKitap, bugunISO, rafAc, ayarlarAc,
+  dosyadanYukle, jsonDosya } = require('./yardim');
 
 function bitmis(ek) {
   return sahteKitap(Object.assign({ durum: 'bitti', bitisTarihi: bugunISO(-30) }, ek));
@@ -208,13 +209,10 @@ test.describe('G79 özet deposu — içe aktarım + bütçe', () => {
     await rafAc(page);
     await ozetHazir(page);
     await ayarlarAc(page);
-    await page.click('[data-act="zg-ozet-ice"]');
-    await page.setInputFiles('#zgOzetDosya', {
-      name: 'ozetler.json', mimeType: 'application/json',
-      buffer: Buffer.from(JSON.stringify({ surum: 1, ozet: [
-        { ad: 'Boş Özetli', yazar: 'Yazar A', ozet: 'Dosyadan gelen yeni özet.' },
-        { ad: 'Dolu Özetli', yazar: 'Yazar B', ozet: 'Dosyadan gelen değişik özet.' },
-        { ad: 'Olmayan Kitap', yazar: 'Kimse', ozet: 'boşa gider' }] }), 'utf8') });
+    await dosyadanYukle(page, jsonDosya({ surum: 1, ozet: [
+      { ad: 'Boş Özetli', yazar: 'Yazar A', ozet: 'Dosyadan gelen yeni özet.' },
+      { ad: 'Dolu Özetli', yazar: 'Yazar B', ozet: 'Dosyadan gelen değişik özet.' },
+      { ad: 'Olmayan Kitap', yazar: 'Kimse', ozet: 'boşa gider' }] }, 'ozetler.json'));
     await expect(page.locator('#zgOzetIceOrtu')).toHaveClass(/acik/);
     const ozet = page.locator('#zgOzetIceOrtu .zg-ozet');
     await expect(ozet).toContainText('1 kitapta boş özet dolacak');

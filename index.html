@@ -1546,73 +1546,32 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
       </section>
       <section class="ay-bolum" id="ayBolumIce">
         <div class="ay-bolum-bas"><span class="kicker">İçe aktar</span></div>
-        <h3 class="ay-baslik">Goodreads'ten aktar</h3>
-        <p class="ay-not">Goodreads → My Books → sol menüde <b>Import and export</b> → <b>Export Library</b> ile CSV indir, buraya yükle. Kitaplar rafları (okundu/okunuyor/okunacak), puanların (5'lik → 10'luğa çevrilir), tarihler, yorumların ve kapaklarıyla gelir.</p>
+        <!-- v109 TEK GİRİŞ. Burada YEDİ ayrı başlık + yedi paragraf vardı
+             (ölçüldü: 1737px = 2,2 ekran, 2511 karakter, 8 düğme, 5 gizli dosya
+             girdisi) ve hepsi aynı cümleyi kuruyordu: dosya seç → ne olacağını
+             gör → onayla. Birleşen şey GİRİŞ; borular birleşmedi — önizleme
+             pencereleri ve yazım yolları aynen duruyor (mantık zengin.js,
+             dy- ad alanı). Boru seçimi düğmeden değil DOSYADAN geliyor. -->
+        <h3 class="ay-baslik">Dosyadan yükle</h3>
+        <p class="ay-not">Tek dosya seç — ne olduğunu tanırım, ne yapacağımı yazarım, sen onaylarsın.
+      Tanıdıklarım: <b>tür listesi</b>, <b>Türkçe ad listesi</b>, <b>özet/ontoloji dosyası</b>,
+      <b>not–alıntı dosyası</b>, uygulamanın <b>JSON yedeği</b> ve <b>Goodreads CSV'si</b>
+      (Goodreads → My Books → <b>Import and export</b> → <b>Export Library</b>).
+      Çoğu dosya yalnız ekler ve düzeltir; <b>silme içerenler</b> (not dosyası ve JSON yedeğinin
+      tam-değiştirme yolu) onaydan önce neyin silineceğini ayrıca yazar.
+      Onaylamadan hiçbir şey yazılmaz, silinmez.</p>
         <div class="ay-eylem">
-          <button class="btn btn-cerceve" data-act="gr-aktar">Goodreads CSV yükle</button>
+          <button class="btn btn-cerceve" data-act="dy-sec">Dosya seç</button>
         </div>
-        <h3 class="ay-baslik">Yedekten geri yükle</h3>
-        <p class="ay-not">JSON yedeğini seç. Mevcut kayıtlarla birleştirilir; aynı kitap (ad + yazar) iki kez eklenmez.</p>
+        <div class="dy-karar" id="dyKarar" hidden></div>
+        <h3 class="ay-baslik">Uygulamayla gelen listeler</h3>
+        <p class="ay-not">Dosya istemez: <b>242 kayıtlık tür listesi</b> ve <b>88 kayıtlık Türkçe ad
+      listesi</b> uygulamanın içinde gelir. İkisi de yukarıdaki dosyalarla aynı önizleme + onay
+      adımlarından geçer; istediğin kadar tekrar uygulayabilirsin, neyin değişeceğini önizleme her
+      seferinde söyler.</p>
         <div class="ay-eylem">
-          <button class="btn btn-cerceve" data-act="ice-aktar">Dosya seç</button>
-        </div>
-        <!-- Tür listesi (v67) — mantık zengin.js'te. Yedekten geri yüklemenin
-             tersine YALNIZ tür alanına dokunur: son değişiklikleri (puan,
-             eklenen kitap, otomatik dolan tür) ezmeden elle hazırlanmış tür
-             listesini işler. Önizleme + onay olmadan tek bayt yazılmaz. -->
-        <h3 class="ay-baslik">Tür listesi yükle</h3>
-        <p class="ay-not">Yalnız <b>tür</b> alanına dokunan içe aktarım: kayıtlar ad + yazar ile eşlenir,
-      türler 1000Kitap düzenine göre doğrulanır, yazmadan önce önizleme onayı alınır. Puan, sayfa,
-      durum, not — başka hiçbir alan değişmez. Dolu tür dosyadaki değerle değişir (önizlemede ayrıca gösterilir).
-      <b>Hazır liste</b> uygulamayla gelen 242 kayıtlık listedir — dosya seçmeden aynı önizleme + onay
-      adımlarından geçer; istediğin kadar tekrar uygulayabilirsin, neyin değişeceğini önizleme her seferinde söyler.</p>
-        <div class="ay-eylem">
-          <button class="btn btn-cerceve" data-act="zg-tur-hazir">Hazır listeyi uygula</button>
-          <button class="btn btn-cerceve" data-act="zg-tur-ice">Tür dosyası seç</button>
-        </div>
-        <!-- Türkçe ad listesi (v73) — aynı içe aktarım borusu, alan=adTr.
-             Taksonomi kapısı yok (serbest metin); önizleme + onay aynen. -->
-        <h3 class="ay-baslik">Türkçe ad listesi</h3>
-        <p class="ay-not">Yabancı başlıkla eklenmiş kitaplara <b>Türkçe adı</b> yazar (88 kayıtlık hazır
-      liste uygulamayla gelir). Kayıtlar ad + yazar ile eşlenir; yalnız Türkçe ad alanı değişir, önizleme
-      onayı olmadan hiçbir şey yazılmaz. Türkçe ad aramada ve Keşfet elemesinde de kullanılır.</p>
-        <div class="ay-eylem">
-          <button class="btn btn-cerceve" data-act="zg-adtr-hazir">Hazır Türkçe ad listesini uygula</button>
-        </div>
-        <h3 class="ay-baslik">Özet dosyası</h3>
-        <p class="ay-not">Dışarıda hazırladığın kitap özetlerini toplu yükler — beklenen biçim:
-      <b>{ "surum": 1, "ozet": [ {ad, yazar, ozet} ] }</b>. Kayıtlar ad + yazar ile eşlenir; yalnız özet
-      alanı yazılır, önizleme onayı olmadan hiçbir şey değişmez. Yerleşik dosya bilinçli yok: özetler
-      kişisel veridir ve 2 MB'lik dosyayı uygulamayla her cihaza indirmek yanlış olurdu.</p>
-        <div class="ay-eylem">
-          <button class="btn btn-cerceve" data-act="zg-ozet-ice">Özet dosyası seç</button>
-        </div>
-        <!-- Not dosyası (v98) — özet kalıbının eşi; planlayıcısı zengin.js'te AYRI
-             (kitap başına çok satır, yalnız EKLEME). Önizleme + onay aynen. -->
-        <h3 class="ay-baslik">Not dosyası</h3>
-        <p class="ay-not">Dışarıda hazırlanan not ve alıntı dosyasını toplu yükler. Kayıtlar ad + yazar ile
-      eşlenir. Aynı dosyayı tekrar yüklersen daha önce bu yoldan gelen notlar yenisiyle değişir; uygulama
-      içinde kendi yazdığın not ve alıntılar korunur. İçe aktarılan bir notu kalıcı olarak saklamak istersen
-      kopyasını kendi notun olarak kaydet. Beklenen biçim:
-      <b>{ "surum": 1, "not": [ {ad, yazar, metin, tip} ] }</b> — tip yalnız "not" ya da "alinti"; başka
-      değer taşıyan satır atlanır, önizlemede sayısı görünür.</p>
-        <div class="ay-eylem">
-          <button class="btn btn-cerceve" data-act="zg-not-ice">Not dosyası seç</button>
-        </div>
-        <!-- Kütüphane dosyası (v100) — TAM DEĞİŞTİRME geri yükleme; mantık zengin.js'te
-             (ky- ad alanı). Yukarıdaki "Yedekten geri yükle" BİRLEŞTİRİR (ekler, silmez);
-             bu yol dosyayı kütüphanenin yeni hâli sayar: dosyada olmayan kayıt silinir.
-             Doğrulama → sayılı onay → yazımdan hemen önce anlık kopya (IndexedDB
-             kk_geri_v1) → tek adım geri al (#kyGeriKart). -->
-        <h3 class="ay-baslik">Kütüphane dosyası</h3>
-        <p class="ay-not">JSON yedeğini kütüphanenin <b>yeni hâli</b> olarak yükler — birleştirme değil,
-      <b>tam değiştirme</b>: dosyadaki kayıtlar yazılır, dosyada olmayan kayıt silinir (yukarıdaki
-      "Yedekten geri yükle" ise yalnız ekler). Dosya önce doğrulanır (kitaplar dizisi, her kayıtta
-      ad + yazar, sürüm); sonra eklenecek / güncellenecek / silinecek sayılarıyla onay istenir —
-      onaylamadan hiçbir şey değişmez. Yazmadan hemen önce mevcut durumun anlık kopyası alınır ve
-      tek adım geri alınabilir. Özetler yalnız dosyadaki damga yereldekinden yeniyse yazılır.</p>
-        <div class="ay-eylem">
-          <button class="btn btn-cerceve" data-act="ky-ice">Kütüphane dosyası seç</button>
+          <button class="btn btn-cerceve" data-act="zg-tur-hazir">Hazır tür listesi</button>
+          <button class="btn btn-cerceve" data-act="zg-adtr-hazir">Hazır Türkçe ad listesi</button>
         </div>
         <div class="ky-geri" id="kyGeriKart" hidden></div>
       </section>
@@ -1943,12 +1902,12 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
      ocDosya da aynı iki gerekçeyle burada ve capture'sız (OCR, ocr.js). -->
 <input type="file" id="kpDosya" accept="image/*" hidden>
 <input type="file" id="ocDosya" accept="image/*" hidden>
-<!-- Aynı gerekçe: bu iki girdi eskiden Yedek panelindeydi, artık Ayarlar
-     PENCERESİNDEN tetikleniyor. Pencere içinde bırakılsalardı üstlerine ikinci
-     bir pencere açıldığı anda inert kapsayıcıya düşer ve .click() sessizce
-     yutulurdu (Goodreads aktarımı ile geri yükleme hata bile vermeden ölürdü). -->
-<input type="file" id="grDosya" accept=".csv,text/csv" hidden>
-<input type="file" id="iceDosya" accept="application/json,.json" hidden>
+<!-- v109: grDosya + iceDosya KALKTI. Yedi dosya girişi tek "Dosyadan yükle"
+     kapısında birleşti; tek gizli girdi (#dyDosya) zengin.js'te kuruluyor ve
+     aynı gerekçeyle yine örtü ağacının DIŞINDA duruyor (pencere içinde kalsaydı
+     üstüne ikinci pencere açılınca inert kapsayıcıya düşer, .click() yutulurdu).
+     iceAktar/goodreadsAktar fonksiyonları DEĞİŞMEDİ — window.__iceAktarma
+     üzerinden çağrılıyorlar. -->
 
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
@@ -5614,8 +5573,6 @@ document.addEventListener('click', e => {
       document.querySelectorAll('#gelenTip .mini-chip').forEach(c =>
         c.classList.toggle('secili', c.dataset.v === v));
       break;
-    case 'ice-aktar': document.getElementById('iceDosya').click(); break;
-    case 'gr-aktar': document.getElementById('grDosya').click(); break;
     case 'tumunu-sil':
       if(!veri.kitaplar.length){ toast('Kütüphane zaten boş'); break; }
       if(confirm(`${veri.kitaplar.length} kitap kalıcı olarak silinecek. Emin misin?`) &&
@@ -5646,17 +5603,13 @@ document.getElementById('sirala').addEventListener('change', e => {
 document.getElementById('etiketFiltre').addEventListener('change', e => {
   durum.etiket = e.target.value; listeCiz();
 });
-document.getElementById('iceDosya').addEventListener('change', e => {
-  if(e.target.files[0]) iceAktar(e.target.files[0]);
-  e.target.value = '';
-});
+/* v109: bu iki yol Ayarlar'daki tek "Dosyadan yükle" kapısından çağrılıyor
+   (zengin.js dy- modülü). Fonksiyonların KENDİSİ değişmedi; yalnız tetikleyici
+   düğmeleri kalktı, dosyayı hangi borunun alacağını artık dosya söylüyor. */
+window.__iceAktarma = { json: iceAktar, goodreads: goodreadsAktar };
 /* v94: taşıma karşılaması AYNI iceAktar borusundan geçer — ayrı yazım yolu yok */
 document.getElementById('tasimaDosya').addEventListener('change', e => {
   if(e.target.files[0]) iceAktar(e.target.files[0]);
-  e.target.value = '';
-});
-document.getElementById('grDosya').addEventListener('change', e => {
-  if(e.target.files[0]) goodreadsAktar(e.target.files[0]);
   e.target.value = '';
 });
 document.getElementById('f-ad').addEventListener('input', canliAraTetikle);

@@ -275,5 +275,30 @@ async function ayrintilarAc(page) {
   if (!(await d.evaluate(e => e.open))) await page.click('#fAyrintilar summary');
 }
 
+/* v109 (dosyadan yükle): yedi ayrı giriş düğmesi tek "Dosya seç" kapısında
+   birleşti — dosya seçilince ALGILAMA KARTI çıkar, boru onaydan sonra koşar.
+   Yardımcı üç adımı birden yapar; çağıran taraf tek satır kalır (v106 dersi:
+   ortak yardımcı yapısal UI değişiminin maliyetini öder).
+     secim === false → kartta DURUR (algılama vakaları kartı sınar)
+     secim === 'birlestir' | 'degistir' | ... → birden çok varış varsa hangisi
+     secim yok → tek varış vardır, onu koşturur.
+   ayarlarAc'ı ÇAĞIRMAZ: bazı vakalar pencereyi kendi düzenekleriyle açıyor. */
+async function dosyadanYukle(page, dosya, secim) {
+  await page.click('#ortuAyar [data-act="dy-sec"]');
+  await page.setInputFiles('#dyDosya', dosya);
+  await expect(page.locator('#dyKarar')).toBeVisible();
+  if (secim === false) return;
+  await page.click('#dyKarar [data-act="dy-calistir"]'
+    + (secim ? `[data-v="${secim}"]` : ''));
+}
+/* JSON gövdesini dosya tanımına çevirir — çağrı yerlerindeki Buffer.from
+   tekrarı tek yerde toplansın. */
+function jsonDosya(govde, ad) {
+  const buffer = Buffer.isBuffer(govde) ? govde
+    : Buffer.from(typeof govde === 'string' ? govde : JSON.stringify(govde), 'utf8');
+  return { name: ad || 'veri.json', mimeType: 'application/json', buffer };
+}
+
 module.exports = { test, expect, tohumla, sahteKitap, agTaklit, kameraTaklit, kameraYok,
-  onaylariKabulEt, bugunISO, rafAc, rafaGec, rafYenile, ayarlarAc, gruplariAc, tehlikeAc, ayrintilarAc };
+  onaylariKabulEt, bugunISO, rafAc, rafaGec, rafYenile, ayarlarAc, gruplariAc, tehlikeAc,
+  ayrintilarAc, dosyadanYukle, jsonDosya };

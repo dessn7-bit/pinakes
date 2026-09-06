@@ -1,6 +1,7 @@
 'use strict';
 const fs = require('fs');
-const { test, expect, tohumla, sahteKitap, rafAc, ayarlarAc } = require('./yardim');
+const { test, expect, tohumla, sahteKitap, rafAc, ayarlarAc,
+  dosyadanYukle, jsonDosya } = require('./yardim');
 
 const GR_CSV = [
   'Title,Author,ISBN13,My Rating,Number of Pages,Year Published,Date Read,Date Added,Bookshelves,Exclusive Shelf,My Review,Publisher',
@@ -8,6 +9,8 @@ const GR_CSV = [
   '"Körlük","José Saramago",,0,352,1995,,2026/06/10,"currently-reading",currently-reading,,',
   '"Dune","Frank Herbert",,0,712,1965,,2026/06/20,"to-read, bilimkurgu",to-read,,'
 ].join('\n');
+const csvDosya = (metin, ad) =>
+  ({ name: ad || 'goodreads.csv', mimeType: 'text/csv', buffer: Buffer.from(metin, 'utf8') });
 
 async function yedekSekmesi(page) {
   await ayarlarAc(page);
@@ -39,8 +42,9 @@ test.describe('G10 yedek ve aktarım', () => {
       { ad: 'Mevcut Kitap', yazar: 'Aynı Yazar' },      // mükerrer → atlanmalı
       { ad: 'Yeni Gelen Kitap', yazar: 'Başka Yazar' }  // eklenmeli
     ], hedef: {} });
-    await page.setInputFiles('#iceDosya',
-      { name: 'yedek.json', mimeType: 'application/json', buffer: Buffer.from(yedek, 'utf8') });
+    /* v109: tek giriş — dosya {kitaplar} taşıyor, iki varış var (birleştir /
+       tam değiştir); BELİRSİZLİK sorulur, burada birleştir seçilir. */
+    await dosyadanYukle(page, jsonDosya(yedek, 'yedek.json'), 'birlestir');
     await expect(page.locator('#toast')).toContainText('1 kitap geri yüklendi');
     expect(await page.evaluate(() => veri.kitaplar.length)).toBe(2);
   });
@@ -48,8 +52,7 @@ test.describe('G10 yedek ve aktarım', () => {
   test('Goodreads CSV: raf→durum, puan 5→10, tarih dönüşümü, yorum→not', async ({ page }) => {
     await rafAc(page);
     await yedekSekmesi(page);
-    await page.setInputFiles('#grDosya',
-      { name: 'goodreads.csv', mimeType: 'text/csv', buffer: Buffer.from(GR_CSV, 'utf8') });
+    await dosyadanYukle(page, csvDosya(GR_CSV));
     await expect(page.locator('#toast')).toContainText('3 kitap aktarıldı');
     const ks = await page.evaluate(() => veri.kitaplar);
     const sofie = ks.find(k => k.ad === "Sofie'nin Dünyası");
@@ -78,10 +81,9 @@ test.describe('G10 yedek ve aktarım', () => {
   test('aynı CSV ikinci kez yüklenirse yeni kayıt oluşmaz', async ({ page }) => {
     await rafAc(page);
     await yedekSekmesi(page);
-    const dosya = { name: 'goodreads.csv', mimeType: 'text/csv', buffer: Buffer.from(GR_CSV, 'utf8') };
-    await page.setInputFiles('#grDosya', dosya);
+    await dosyadanYukle(page, csvDosya(GR_CSV));
     await expect(page.locator('#toast')).toContainText('3 kitap aktarıldı');
-    await page.setInputFiles('#grDosya', dosya);
+    await dosyadanYukle(page, csvDosya(GR_CSV));
     await expect(page.locator('#toast')).toContainText('Hepsi zaten kayıtlı');
     expect(await page.evaluate(() => veri.kitaplar.length)).toBe(3);
   });
@@ -90,14 +92,20 @@ test.describe('G10 yedek ve aktarım', () => {
     await tohumla(page, [sahteKitap({ ad: 'Korunan Kitap' })]);
     await rafAc(page);
     await yedekSekmesi(page);
-    // bozuk JSON
-    await page.setInputFiles('#iceDosya',
-      { name: 'bozuk.json', mimeType: 'application/json', buffer: Buffer.from('{{bozuk', 'utf8') });
-    await expect(page.locator('#toast')).toContainText('geçerli bir Pinakes yedeği değil');
+    /* v109: red artık KAPIDA. Bozuk dosya hiçbir boruya ulaşmıyor — iki ayrı
+       boru-içi mesaj yerine tek kapı mesajı + kartta beklenen biçimler listesi
+       (rehberlik kaybolmadı, tek yerde toplandı). */
+    await page.click('#ortuAyar [data-act="dy-sec"]');
+    await page.setInputFiles('#dyDosya', jsonDosya('{{bozuk', 'bozuk.json'));
+    await expect(page.locator('#toast')).toContainText('geçerli bir JSON değil');
+    await expect(page.locator('#dyKarar')).toContainText('tanıyamadım');
+    await expect(page.locator('#dyKarar')).toContainText('Goodreads');
     // bozuk CSV (Goodreads başlıkları yok)
-    await page.setInputFiles('#grDosya',
-      { name: 'bozuk.csv', mimeType: 'text/csv', buffer: Buffer.from('a;b;c\n1;2;3', 'utf8') });
-    await expect(page.locator('#toast')).toContainText('Goodreads Export Library CSV');
+    await page.click('#dyKarar [data-act="dy-vazgec"]');
+    await page.click('#ortuAyar [data-act="dy-sec"]');
+    await page.setInputFiles('#dyDosya', csvDosya('a;b;c', 'bozuk.csv'));
+    await expect(page.locator('#toast')).toContainText('tanıdığım bir liste yok');
+    await expect(page.locator('#dyKarar [data-act="dy-calistir"]')).toHaveCount(0);
     expect(await page.evaluate(() => veri.kitaplar.length)).toBe(1);
     expect(await page.evaluate(() => veri.kitaplar[0].ad)).toBe('Korunan Kitap');
   });

@@ -281,7 +281,11 @@ test.describe('G30 — boş kütüphane', () => {
     await expect(page.locator('#ortuForm')).not.toHaveClass(/acik/);
     await page.click('#panel-ana [data-act="ayar-ac"]');
     await expect(page.locator('#ortuAyar')).toHaveClass(/acik/);
-    await expect(page.locator('#ortuAyar')).toContainText("Goodreads'ten aktar");
+    /* v109: "Goodreads'ten aktar" AYRI BAŞLIK değil — yedi giriş tek kapıda
+       birleşti. Boş kütüphanenin işaret ettiği yol duruyor: Ayarlar'daki
+       "Dosyadan yükle" Goodreads CSV'sini de kabul ediyor. */
+    await expect(page.locator('#ortuAyar')).toContainText('Dosyadan yükle');
+    await expect(page.locator('#ortuAyar')).toContainText('Goodreads');
   });
 });
 
@@ -298,7 +302,7 @@ test.describe('G30 — Ayarlar penceresi', () => {
     await ayarlarAc(page);
     const p = page.locator('#ortuAyar');
     for (const act of ['disa-aktar', 'csv-aktar', 'md-alinti', 'md-hepsi',
-      'gr-aktar', 'ice-aktar', 'kp-tum-sil', 'seri-ac']) {
+      'dy-sec', 'kp-tum-sil', 'seri-ac']) {
       await expect(p.locator(`[data-act="${act}"]`), act + ' düğmesi').toBeVisible();
     }
     /* v56: "Kütüphaneyi boşalt" TEHLİKELİ BÖLGE'de ve katlı — kapalıyken
@@ -362,16 +366,15 @@ test.describe('G30 — Ayarlar penceresi', () => {
        yutulurdu. Girdilerin örtü ağacında OLMADIĞINI doğruluyoruz. */
     await tohumla(page, [bitmisK()]);
     await page.goto('/');
-    await expect(page.locator('.ortu #grDosya')).toHaveCount(0);
-    await expect(page.locator('.ortu #iceDosya')).toHaveCount(0);
     await ayarlarAc(page);
-    for (const [act, id] of [['gr-aktar', '#grDosya'], ['ice-aktar', '#iceDosya']]) {
-      const [secici] = await Promise.all([
-        page.waitForEvent('filechooser'),
-        page.click(`#ortuAyar [data-act="${act}"]`),
-      ]);
-      expect(await secici.element().evaluate(e => e.id)).toBe(id.slice(1));
-    }
+    /* v109: yedi girdi tek #dyDosya'ya indi; kilit AYNI gerçeği sınıyor —
+       girdi örtü ağacının DIŞINDA olmalı, yoksa .click() inert'te yutulur. */
+    const [secici] = await Promise.all([
+      page.waitForEvent('filechooser'),
+      page.click('#ortuAyar [data-act="dy-sec"]'),
+    ]);
+    expect(await secici.element().evaluate(e => e.id)).toBe('dyDosya');
+    await expect(page.locator('.ortu #dyDosya')).toHaveCount(0);
   });
 
   test('tema düğmeleri Ayarlar penceresinden çalışır ve yenilemede korunur', async ({ page }) => {

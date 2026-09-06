@@ -1507,45 +1507,10 @@
     }
     iceOku(cfg, y);
   }
-  function turDosyaKur(){
-    let g = document.getElementById('zgTurDosya');
-    if(!g){
-      g = document.createElement('input');
-      g.type = 'file'; g.id = 'zgTurDosya';
-      g.accept = '.json,application/json'; g.hidden = true;
-      document.body.appendChild(g);
-    }
-    if(!g.__zgBagli){   // dinleyici BİR kez bağlanır — her tıklamada çoğalmasın
-      g.__zgBagli = true;
-      g.addEventListener('change', e => {
-        const f = e.target.files && e.target.files[0];
-        if(f) iceOku(ICE_TUR, f);
-        e.target.value = '';   // aynı dosya ikinci kez seçilebilsin
-      });
-    }
-    return g;
-  }
-  /* v80: özet dosya seçici — turDosyaKur'un AYRI kopyası (KARAR: g56
-     #zgTurDosya seçicisini ve davranışını kilitliyor; paylaşılan fonksiyona
-     genellemek yerine kopya, tür yolunu sıfır riskle korur). */
-  function ozetDosyaKur(){
-    let g = document.getElementById('zgOzetDosya');
-    if(!g){
-      g = document.createElement('input');
-      g.type = 'file'; g.id = 'zgOzetDosya';
-      g.accept = '.json,application/json'; g.hidden = true;
-      document.body.appendChild(g);
-    }
-    if(!g.__zgBagli){   // dinleyici BİR kez bağlanır — her tıklamada çoğalmasın
-      g.__zgBagli = true;
-      g.addEventListener('change', e => {
-        const f = e.target.files && e.target.files[0];
-        if(f) iceOku(ICE_OZET, f);
-        e.target.value = '';   // aynı dosya ikinci kez seçilebilsin
-      });
-    }
-    return g;
-  }
+  /* v109: turDosyaKur / ozetDosyaKur / notDosyaKur / kyDosyaKur — DÖRT
+     neredeyse birebir kopyaydı (kyDosyaKur'un yorumu bunu zaten söylüyordu).
+     Hepsi tek `dyDosyaKur`'a indi; dosyanın hangi boruya gideceğini artık
+     düğme değil DOSYANIN KENDİSİ söylüyor (dy- modülü, aşağıda). */
 
   /* ---------- NOT DOSYASI içe aktarımı (v98 → v99 kitap bazında yenileme) ---------- */
   async function iceNotOku(dosya){
@@ -1682,25 +1647,6 @@
     bildir(cfg.metin.toastYazildi(nYaz, nSil, nKitap));
     if(typeof hepsiniCiz === 'function') hepsiniCiz();
     cfg.sonTazele();
-  }
-  /* not dosya seçici — ozetDosyaKur'un aynı-kalıp kopyası (zgNotDosya) */
-  function notDosyaKur(){
-    let g = document.getElementById('zgNotDosya');
-    if(!g){
-      g = document.createElement('input');
-      g.type = 'file'; g.id = 'zgNotDosya';
-      g.accept = '.json,application/json'; g.hidden = true;
-      document.body.appendChild(g);
-    }
-    if(!g.__zgBagli){   // dinleyici BİR kez bağlanır — her tıklamada çoğalmasın
-      g.__zgBagli = true;
-      g.addEventListener('change', e => {
-        const f = e.target.files && e.target.files[0];
-        if(f) iceNotOku(f);
-        e.target.value = '';   // aynı dosya ikinci kez seçilebilsin
-      });
-    }
-    return g;
   }
 
   /* ========== KÜTÜPHANE DOSYASI (v100) — TAM DEĞİŞTİRME geri yükleme ==========
@@ -1950,24 +1896,6 @@
   function kyBaslikYaz(metin){
     const b = document.querySelector('#kyOrtu .sheet-baslik');
     if(b) b.textContent = metin;
-  }
-  function kyDosyaKur(){   // notDosyaKur'un aynı-kalıp kopyası (kyDosya)
-    let g = document.getElementById('kyDosya');
-    if(!g){
-      g = document.createElement('input');
-      g.type = 'file'; g.id = 'kyDosya';
-      g.accept = '.json,application/json'; g.hidden = true;
-      document.body.appendChild(g);
-    }
-    if(!g.__zgBagli){
-      g.__zgBagli = true;
-      g.addEventListener('change', e => {
-        const f = e.target.files && e.target.files[0];
-        if(f) kyOku(f);
-        e.target.value = '';
-      });
-    }
-    return g;
   }
   async function kyOku(dosya){
     let govde;
@@ -2674,8 +2602,205 @@
     tarihCiz_();
   }
 
+  /* ========== DOSYADAN YÜKLE (dy-, v109) — TEK GİRİŞ, YEDİ VARIŞ ==========
+     Ayarlar ▸ İçe aktar'da YEDİ ayrı başlık + yedi paragraf vardı (ölçüldü:
+     1737px = 2,2 ekran, 2511 karakter açıklama, 8 düğme, 5 ayrı gizli dosya
+     girdisi, 4 neredeyse birebir *DosyaKur kopyası) ve hepsi AYNI cümleyi
+     kuruyordu: dosya seç → ne olacağını gör → onayla.
+
+     BİRLEŞEN ŞEY GİRİŞ; BORULAR BİRLEŞMEDİ. Önizleme pencereleri
+     (zgTurIceOrtu / zgAdTrOrtu / zgOzetIceOrtu / zgNotIceOrtu / kyOrtu),
+     plan kurucular, kapılar ve yazım yolları AYNEN duruyor — bu modül yalnız
+     hangisinin çalışacağını seçiyor. Riski ve test maliyetini bir kata
+     düşüren karar bu.
+
+     ALGILAMA + ONAY (Kaan kararı). Dosya kendini kök anahtarından söyler,
+     kullanıcı doğrular. Saf algılama YETMEZDİ: `{kitaplar}` gövdesi hem
+     "birleştir" (yalnız ekler) hem "tam değiştir" (dosyada olmayanı siler)
+     için geçerli ve hangisinin istendiği DOSYADAN ÇIKARILAMAZ — o kullanıcı
+     niyeti. Orada algılama karar VERMEZ, sorar; yıkıcı olmayan seçenek önce
+     ve birincil düğme olarak durur. Saf tür seçici de yetmezdi: yanlış türü
+     seçen kullanıcı bugün ancak dosyayı verdikten sonra "bu dosyada X yok"
+     duyuyordu.
+
+     KADEME (Kaan kararı: "ekler ve düzeltir" / "değiştirir ve silebilir").
+     Tek giriş olunca kademe iki düğme grubu olamaz — onay KARTININ iki
+     görünümüne indi: silen borular (not dosyası, tam değiştirme) ayrı zeminli
+     uyarı şeridi taşır ve neyin silineceğini onaydan önce yazar. */
+  const DY_TANIM = {
+    tur: { ad: 'Tür listesi', anahtar: 'tur', birim: 'kayıt', siler: false,
+      dugme: 'Türleri oku',
+      yazar: 'kayıtların yalnız TÜR alanını (1000Kitap düzenine göre doğrulanır)',
+      dokunmaz: 'puan, sayfa, durum, not — başka hiçbir alan',
+      calistir: d => iceOku(ICE_TUR, d) },
+    adTr: { ad: 'Türkçe ad listesi', anahtar: 'adTr', birim: 'kayıt', siler: false,
+      dugme: 'Türkçe adları oku',
+      yazar: 'kayıtların yalnız TÜRKÇE AD alanını',
+      dokunmaz: 'kitabın adı, türü, puanı, notları — başka hiçbir alan',
+      calistir: d => iceOku(ICE_ADTR, d) },
+    ozet: { ad: 'Özet dosyası', anahtar: 'ozet', birim: 'kayıt', siler: false,
+      dugme: 'Özetleri oku',
+      yazar: 'kayıtların ÖZET ve (varsa) ONTOLOJİ alanlarını',
+      dokunmaz: 'puan, notlar, durum — başka hiçbir alan',
+      calistir: d => iceOku(ICE_OZET, d) },
+    not: { ad: 'Not dosyası', anahtar: 'not', birim: 'satır', siler: true, geriAl: false,
+      dugme: 'Notları oku',
+      yazar: 'dosyada geçen kitaplara not ve alıntı',
+      dokunmaz: 'elle girdiğin, paylaşımdan ve Goodreads\'ten gelen notlar',
+      silme: 'dosyada geçen kitapların daha önce BU YOLDAN gelen (dosya işaretli) notları kaldırılır.',
+      calistir: d => iceNotOku(d) },
+    birlestir: { ad: 'JSON yedeği — birleştir', anahtar: 'kitaplar', birim: 'kitap', siler: false,
+      dugme: 'Birleştir (yalnız ekler)',
+      yazar: 'dosyadaki kitaplardan rafta OLMAYANLARI',
+      dokunmaz: 'mevcut kayıtlar; aynı kitap (ad + yazar) iki kez eklenmez',
+      calistir: d => window.__iceAktarma.json(d) },
+    degistir: { ad: 'JSON yedeği — tam değiştir', anahtar: 'kitaplar', birim: 'kitap',
+      siler: true, geriAl: true,
+      dugme: 'Tam değiştir',
+      yazar: 'dosyayı kütüphanenin YENİ HÂLİ sayar: dosyadaki kayıtlar yazılır',
+      dokunmaz: 'yalnız damgası daha yeni olan özetler korunur',
+      silme: 'dosyada OLMAYAN kayıt silinir.',
+      calistir: d => kyOku(d) },
+    goodreads: { ad: 'Goodreads CSV', anahtar: null, birim: '', siler: false,
+      dugme: 'Goodreads kitaplarını al',
+      yazar: 'rafları, puanları, tarihleri ve yorumlarıyla YENİ kitapları',
+      dokunmaz: 'mevcut kayıtlar; rafta olan kitap atlanır',
+      calistir: d => window.__iceAktarma.goodreads(d) }
+  };
+  const DY_JSON_SIRA = ['tur', 'adTr', 'ozet', 'not'];
+  /* Kök anahtardan tanır. Dönüş: { bulunan: [{tip, sayi}], hata }.
+     Birden çok anahtar taşıyan dosya birden çok seçenek üretir — uydurma
+     öncelik sırası koymaktansa SORMAK doğru. */
+  function dyTani(metin){
+    const ham = String(metin || ''), ilk = ham.trim().charAt(0);
+    /* "geçerli bir JSON değil" cümlesi yalnız JSON OLMAYA ÇALIŞAN dosyaya
+       söylenir; noktalı virgüllü bir CSV'ye JSON'dan söz etmek yanıltıcı. */
+    const jsonDenendi = ilk === '{' || ilk === '[';
+    let g = null;
+    try{ g = JSON.parse(ham); }catch(e){ g = null; }
+    if(g && typeof g === 'object' && !Array.isArray(g)){
+      const bulunan = [];
+      /* Dizinin BOŞ olması tanımayı bozmaz — boş listeye ne diyeceğini borunun
+         KENDİSİ biliyor ("boş not dizisi", "dosyada hiç kitap yok — tam
+         değiştirme kütüphaneyi boşaltırdı"). Kapıda eleseydik o dürüst
+         mesajların yerini genel bir "tanımadım" alırdı. */
+      for(const t of DY_JSON_SIRA){
+        const d = g[DY_TANIM[t].anahtar];
+        if(Array.isArray(d)) bulunan.push({ tip: t, sayi: d.length });
+      }
+      /* {kitaplar} BELİRSİZ: yıkıcı olmayan seçenek ÖNCE (varsayılan birleştir) */
+      if(Array.isArray(g.kitaplar)){
+        bulunan.push({ tip: 'birlestir', sayi: g.kitaplar.length });
+        bulunan.push({ tip: 'degistir', sayi: g.kitaplar.length });
+      }
+      return { bulunan, hata: bulunan.length ? '' : 'liste-yok' };
+    }
+    /* JSON değil → Goodreads CSV mi? goodreadsAktar'ın KENDİ kapısının aynısı:
+       Title + Author sütunları şart. Başlık ilk satırda; satır sonu biçimine
+       bağlanmamak için başın ilk 2 KB'sine bakılır. */
+    const bas = ham.slice(0, 2048);
+    if(bas.indexOf('Title') >= 0 && bas.indexOf('Author') >= 0)
+      return { bulunan: [{ tip: 'goodreads', sayi: 0 }], hata: '' };
+    return { bulunan: [], hata: jsonDenendi ? 'json-degil' : 'liste-yok' };
+  }
+  let dyDosya = null;         // onay anına kadar bekleyen dosya (File)
+  function dyKapat(){
+    dyDosya = null;
+    const k = document.getElementById('dyKarar');
+    if(k){ k.hidden = true; k.innerHTML = ''; }
+  }
+  function dyKararCiz(dosyaAdi, sonuc){
+    const k = document.getElementById('dyKarar');
+    if(!k) return;
+    k.hidden = false;
+    if(!sonuc.bulunan.length){
+      /* Mesaj METNİ değişmedi: bozuk JSON aynı cümleyi duyurur (g56 kilidi). */
+      bildir(sonuc.hata === 'json-degil'
+        ? 'Dosya okunamadı — geçerli bir JSON değil'
+        : 'Bu dosyada tanıdığım bir liste yok');
+      k.innerHTML =
+        '<div class="dy-tani">' + esc(dosyaAdi) + ' — <b>tanıyamadım</b>. Hiçbir şey yazılmadı.</div>' +
+        '<div class="dy-ne">Beklenen biçimler: <b>{ "tur": [...] }</b> · <b>{ "adTr": [...] }</b> · ' +
+        '<b>{ "ozet": [...] }</b> · <b>{ "not": [...] }</b> · <b>{ "kitaplar": [...] }</b> (uygulamanın ' +
+        'JSON yedeği) · Goodreads dışa aktarımının CSV\'si (Title + Author sütunlu).</div>' +
+        '<div class="ay-eylem"><button class="btn btn-cerceve" data-act="dy-vazgec">Kapat</button></div>';
+      return;
+    }
+    const cok = sonuc.bulunan.length > 1;
+    const ilk = DY_TANIM[sonuc.bulunan[0].tip];
+    const sayi = sonuc.bulunan[0].sayi;
+    k.innerHTML =
+      '<div class="dy-tani">' + esc(dosyaAdi) + ' — ' +
+        (cok
+          ? '<b>' + esc(sayi) + ' kitaplık JSON yedeği</b>. İki şey yapabilirim, hangisi?'
+          : '<b>' + esc(ilk.ad) + '</b> tanıdım' +
+            (sayi ? ' — ' + esc(sayi) + ' ' + esc(ilk.birim) + '.' : '.')) +
+      '</div>' +
+      sonuc.bulunan.map(b => {
+        const t = DY_TANIM[b.tip];
+        return '<div class="dy-secenek' + (t.siler ? ' dy-siler' : '') + '">' +
+          (cok ? '<div class="dy-ad">' + esc(t.ad) + '</div>' : '') +
+          '<div class="dy-ne"><b>Yazar:</b> ' + esc(t.yazar) + '<br><b>Dokunmaz:</b> ' + esc(t.dokunmaz) + '</div>' +
+          (t.siler
+            ? '<div class="dy-uyari">Bu işlem SİLME içerir — ' + esc(t.silme) + ' ' +
+              (t.geriAl ? 'Yazımdan hemen önce anlık kopya alınır, tek adımda geri alınabilir.'
+                        : 'Geri alınamaz.') + '</div>'
+            : '') +
+          /* Hepsi ÇERÇEVELİ (g29/g30/g48: pencere başına TEK birincil, o da
+             "JSON indir"). Zaten doğrusu bu: kart bir SORU soruyor, iki varış
+             da eşit derecede geçerli. Öneri düğme dolgusuyla değil SIRAYLA
+             (yıkıcı olmayan önce) ve silenin uyarı şeridiyle anlatılıyor. */
+          '<button class="btn btn-cerceve" data-act="dy-calistir" data-v="'
+            + b.tip + '">' + esc(t.dugme) + '</button>' +
+          '</div>';
+      }).join('') +
+      '<div class="ay-eylem"><button class="btn btn-cerceve" data-act="dy-vazgec">Vazgeç</button></div>';
+  }
+  function dyDosyaKur(){
+    let g = document.getElementById('dyDosya');
+    if(!g){
+      g = document.createElement('input');
+      g.type = 'file'; g.id = 'dyDosya';
+      g.accept = '.json,.csv,application/json,text/csv'; g.hidden = true;
+      /* Girdi örtü ağacının DIŞINDA durur (g30 kilidi): pencere içinde kalsaydı
+         üstüne ikinci pencere açılınca inert kapsayıcıya düşer, .click() yutulurdu. */
+      document.body.appendChild(g);
+    }
+    if(!g.__zgBagli){   // dinleyici BİR kez bağlanır — her tıklamada çoğalmasın
+      g.__zgBagli = true;
+      g.addEventListener('change', async e => {
+        const f = e.target.files && e.target.files[0];
+        e.target.value = '';   // aynı dosya ikinci kez seçilebilsin
+        if(!f) return;
+        dyDosya = f;
+        let metin = '';
+        try{ metin = await f.text(); }catch(err){ metin = ''; }
+        dyKararCiz(f.name || 'dosya', dyTani(metin));
+      });
+    }
+    return g;
+  }
+  function dyCalistir(tip){
+    const t = DY_TANIM[tip], d = dyDosya;
+    if(!t || !d) return;
+    dyKapat();                 // kart kapanır; sıra borunun KENDİ önizlemesinde
+    t.calistir(d);
+  }
+
   /* ---------- bağlama ---------- */
   const CSS = [
+    '.dy-karar{margin-top:12px;border:1px solid var(--kontur);border-radius:var(--r-md);padding:12px 13px}',
+    '.dy-tani{font-size:.88rem;color:var(--paper);line-height:1.5}',
+    '.dy-tani b{font-variant-numeric:tabular-nums}',
+    '.dy-secenek{margin-top:12px}',
+    '.dy-secenek + .dy-secenek{border-top:1px solid var(--kontur);padding-top:12px}',
+    '.dy-ad{font-size:.85rem;color:var(--paper);font-weight:600;margin-bottom:4px}',
+    '.dy-ne{font-size:.8rem;color:var(--muted);line-height:1.55;margin-bottom:8px}',
+    '.dy-ne b{color:var(--paper);font-weight:600}',
+    /* silme kademesi: AYRI ZEMİN (Kaan kararı) — sayılar onaydan önce yazılı */
+    '.dy-uyari{font-size:.8rem;color:var(--drop);line-height:1.5;margin-bottom:8px;' +
+      'background:color-mix(in srgb,var(--drop) 9%,transparent);border-radius:var(--r-ic);padding:8px 10px}',
+    '.dy-secenek .btn{width:100%}',
     '.zg-satir{font-size:.9rem;color:var(--paper);margin:10px 0 8px;font-variant-numeric:tabular-nums}',
     '.zg-ozet{font-size:.85rem;color:var(--muted);margin:8px 0;line-height:1.5}',
     '.zg-ozet b{color:var(--paper);font-variant-numeric:tabular-nums}',
@@ -2796,23 +2921,21 @@
           }
           break; }
         case 'zg-kapat': kapat(el.dataset.ortu); break;
-        case 'zg-tur-ice': turDosyaKur(); document.getElementById('zgTurDosya').click(); break;
+        /* v109: yedi dosya girişi TEK kapıda birleşti. Boru seçimi düğmeden
+           değil dosyanın kendisinden geliyor; onay kartı dy-calistir'i çizer. */
+        case 'dy-sec': dyKapat(); dyDosyaKur().click(); break;
+        case 'dy-calistir': dyCalistir(el.dataset.v); break;
+        case 'dy-vazgec': dyKapat(); break;
         case 'zg-tur-hazir': iceHazirYukle(ICE_TUR); break;
         case 'zg-tur-uygula': iceUygula(); break;
         case 'zg-tur-vazgec': iceVazgec(); break;
         case 'zg-adtr-hazir': iceHazirYukle(ICE_ADTR); break;
         case 'zg-adtr-uygula': iceUygula(); break;
         case 'zg-adtr-vazgec': iceVazgec(); break;
-        // v80 M3: özet dosyası — düğme HTML'i index.html'de (data-act="zg-ozet-ice")
-        case 'zg-ozet-ice': ozetDosyaKur(); document.getElementById('zgOzetDosya').click(); break;
         case 'zg-ozet-uygula': iceUygula(); break;   // iceUygula özet planında async dalı seçer
         case 'zg-ozet-vazgec': iceVazgec(); break;
-        // v98: not dosyası — düğme HTML'i index.html'de (data-act="zg-not-ice")
-        case 'zg-not-ice': notDosyaKur(); document.getElementById('zgNotDosya').click(); break;
         case 'zg-not-uygula': iceUygula(); break;   // iceUygula not planında iceNotUygula dalını seçer
         case 'zg-not-vazgec': iceVazgec(); break;
-        // v100: kütüphane dosyası (TAM DEĞİŞTİRME) — düğme HTML'i index.html'de (data-act="ky-ice")
-        case 'ky-ice': kyDosyaKur(); document.getElementById('kyDosya').click(); break;
         case 'ky-uygula': kyUygula(); break;
         case 'ky-vazgec': kyVazgec(); break;
         case 'ky-geri': kyGeriBaslat(); break;
@@ -2870,6 +2993,8 @@
     ciltGB, ciltWorker, ciltUyumsuzlugu, yayineviGecersiz, isbnGecersiz,
     isbnUlke, isbnGrup, yayineviTurkMu, beklenenDil, kunyeKatla, metinCelisir,
     ARALIK_MS, ALANLAR, KUNYE, KUYRUK_ANAHTAR, OTO_DENEME_ANAHTAR, OTO_ATANAN_ANAHTAR };
+  /* v109: dosyadan yükle — algılama test kancası (hiçbiri yazmaz) */
+  window.__dy = { tani: dyTani, TANIM: DY_TANIM };
   /* v100: kütüphane dosyası (tam değiştirme) test kancaları — hiçbiri yazmaz */
   window.__ky = { dogrula: kyDogrula, planKur: kyPlanKur, iz: kyIz, anlikOku: kyAnlikOku,
     ozetGirisleri: kyOzetGirisleri, DB_AD: KY_DB_AD, MAGAZA: KY_MAGAZA, ANAHTAR: KY_ANAHTAR };

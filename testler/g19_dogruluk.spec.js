@@ -1,5 +1,6 @@
 'use strict';
-const { test, expect, tohumla, sahteKitap, bugunISO, rafAc, ayarlarAc } = require('./yardim');
+const { test, expect, tohumla, sahteKitap, bugunISO, rafAc, ayarlarAc,
+  dosyadanYukle, jsonDosya } = require('./yardim');
 
 /* --------- M1: Türkçe arama asimetrisi --------- */
 test.describe('G19 M1 — Türkçe katlama (arama ve kopya tespiti)', () => {
@@ -57,8 +58,7 @@ test.describe('G19 M1 — Türkçe katlama (arama ve kopya tespiti)', () => {
     await ayarlarAc(page);
     const csv = ['Title,Author,Exclusive Shelf,My Rating,Number of Pages',
       '"Istanbul Hatirasi","Ahmet Umit",read,4,500'].join('\n');
-    await page.setInputFiles('#grDosya',
-      { name: 'gr.csv', mimeType: 'text/csv', buffer: Buffer.from(csv, 'utf8') });
+    await dosyadanYukle(page, { name: 'gr.csv', mimeType: 'text/csv', buffer: Buffer.from(csv, 'utf8') });
     await expect(page.locator('#toast')).toContainText('Hepsi zaten kayıtlı');
     expect(await page.evaluate(() => veri.kitaplar.length)).toBe(1);   // mükerrer yok
   });
@@ -69,8 +69,7 @@ test.describe('G19 M1 — Türkçe katlama (arama ve kopya tespiti)', () => {
     await ayarlarAc(page);
     const yedek = JSON.stringify({ surum: 2,
       kitaplar: [{ ad: 'Ince Memed', yazar: 'Yasar Kemal' }], hedef: {} });
-    await page.setInputFiles('#iceDosya',
-      { name: 'y.json', mimeType: 'application/json', buffer: Buffer.from(yedek, 'utf8') });
+    await dosyadanYukle(page, jsonDosya(yedek, 'y.json'), 'birlestir');
     await expect(page.locator('#toast')).toContainText('Yeni kitap yok');
     expect(await page.evaluate(() => veri.kitaplar.length)).toBe(1);
   });

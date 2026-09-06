@@ -17,7 +17,8 @@
    · TAM TUR: yedek indir → değiştirmeden yükle → 0/0/0, sayı ve alanlar birebir. */
 const fs = require('fs');
 const path = require('path');
-const { test, expect, tohumla, sahteKitap, rafAc, ayarlarAc } = require('./yardim');
+const { test, expect, tohumla, sahteKitap, rafAc, ayarlarAc,
+  dosyadanYukle, jsonDosya } = require('./yardim');
 
 const G0 = 1700000000000;   // sıfırdan farklı damga: damgala g=0 kitapları taze damgalar, bunları değil
 function dortlu() {
@@ -32,10 +33,9 @@ function dortlu() {
 const kitaplarOku = page => page.evaluate(() => JSON.parse(JSON.stringify(veri.kitaplar)));
 const veriOku = page => page.evaluate(() => JSON.parse(JSON.stringify(veri)));
 async function dosyaYukle(page, govde, ad) {
-  await page.click('[data-act="ky-ice"]');
-  const buffer = Buffer.isBuffer(govde) ? govde
-    : Buffer.from(typeof govde === 'string' ? govde : JSON.stringify(govde), 'utf8');
-  await page.setInputFiles('#kyDosya', { name: ad || 'kutuphane.json', mimeType: 'application/json', buffer });
+  /* v109: {kitaplar} gövdesi BELİRSİZ — birleştir mi tam değiştir mi, dosyadan
+     çıkarılamaz. Algılama karar vermez, sorar; burada "degistir" seçilir. */
+  await dosyadanYukle(page, jsonDosya(govde, ad || 'kutuphane.json'), 'degistir');
 }
 /* Dosya = "dışa aktarım + dış düzeltme": A aynı, B ad + yayınevi düzeltilmiş,
    E yeni (id'siz), C ve D dosyada yok (silinecek); ayrıca dosya mezarı + hedef */
@@ -55,18 +55,29 @@ async function hazirla(page, kitaplar, ekstraVeri) {
 
 test.describe('G95 kütüphane dosyası — tam değiştirme geri yükleme (v100)', () => {
 
-  test('g) Ayarlar girişi: "Kütüphane dosyası" başlığı Not dosyasının altında, düğme + gizli geri-al kartı; sw ≥ v100', async ({ page }) => {
+  test('g) Ayarlar girişi: tek "Dosyadan yükle" kapısı, tam değiştirme onay kartında anlatılır, gizli geri-al kartı; sw ≥ v100', async ({ page }) => {
     await hazirla(page);
+    /* v109: "Kütüphane dosyası" ARTIK AYRI BAŞLIK DEĞİL — yedi giriş tek kapıda
+       birleşti. Yol hâlâ orada: dosya {kitaplar} taşıyınca onay kartı iki varışı
+       birden sunuyor ve tam değiştirmenin ne sildiğini onaydan ÖNCE yazıyor. */
     const basliklar = await page.evaluate(() =>
-      /* v106: aktarım yöne göre ikiye ayrıldı — dosya boruları İçe aktar'da. */
       [...document.querySelectorAll('#ayBolumIce .ay-baslik')].map(h => h.textContent.trim()));
-    const i = basliklar.indexOf('Kütüphane dosyası');
-    expect(i).toBeGreaterThan(0);
-    expect(basliklar[i - 1]).toBe('Not dosyası');
-    expect(basliklar[i - 2]).toBe('Özet dosyası');
-    await expect(page.locator('#ayBolumIce [data-act="ky-ice"]')).toHaveText('Kütüphane dosyası seç');
+    expect(basliklar).toEqual(['Dosyadan yükle', 'Uygulamayla gelen listeler']);
+    await page.click('#ortuAyar [data-act="dy-sec"]');
+    await page.setInputFiles('#dyDosya', jsonDosya(
+      { surum: 2, kitaplar: [{ ad: 'A', yazar: 'B' }], hedef: {} }, 'kutuphane.json'));
+    const kart = page.locator('#dyKarar');
+    await expect(kart.locator('[data-act="dy-calistir"]')).toHaveCount(2);
+    await expect(kart).toContainText('tam değiştir');
+    await expect(kart).toContainText('SİLME içerir');
+    await expect(kart).toContainText('geri alınabilir');
+    /* yıkıcı olmayan seçenek ÖNCE; iki düğme de çerçeveli (pencere başına tek
+       birincil kuralı) — öneri sırayla ve silenin uyarı şeridiyle anlatılıyor */
+    const ilk = kart.locator('[data-act="dy-calistir"]').first();
+    await expect(ilk).toHaveAttribute('data-v', 'birlestir');
+    await expect(ilk).not.toHaveClass(/btn-brass/);
+    await page.click('#dyKarar [data-act="dy-vazgec"]');
     await expect(page.locator('#kyGeriKart')).toBeHidden();   // anlık kopya yok → kart yok
-    await expect(page.locator('#ayBolumIce')).toContainText('tam değiştirme');
     const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
     const m = sw.match(/const CACHE = ONEK \+ '-v(\d+)';/);
     expect(m, 'sw CACHE sürüm satırı').toBeTruthy();
@@ -77,9 +88,21 @@ test.describe('G95 kütüphane dosyası — tam değiştirme geri yükleme (v100
     await hazirla(page);
     const once = await veriOku(page);
     const lsOnce = await page.evaluate(() => localStorage.getItem('kk_kitaplik_v1'));
+    /* v109 İKİ KADEME. Kapı "bu bir Pinakes dosyası mı?" sorusunu yanıtlıyor
+       (bozuk JSON, kitaplar dizisi olmayan gövde) — bunlar artık kyOku'ya hiç
+       ulaşmıyor. kyDogrula "Pinakes dosyası ama neyi bozuk?" sorusunda kalıyor. */
+    for (const [govde, ad, beklenen] of [
+      ['{bozuk', 'bozuk.json', 'geçerli bir JSON değil'],
+      [{ surum: 2, kitap: [] }, 'kitapsiz.json', 'tanıdığım bir liste yok']
+    ]) {
+      await page.click('#ortuAyar [data-act="dy-sec"]');
+      await page.setInputFiles('#dyDosya', jsonDosya(govde, ad));
+      await expect(page.locator('#toast')).toContainText(beklenen);
+      await expect(page.locator('#dyKarar')).toContainText('tanıyamadım');
+      await expect(page.locator('#kyOrtu.acik')).toHaveCount(0);   // boru hiç çalışmadı
+      await page.click('#dyKarar [data-act="dy-vazgec"]');
+    }
     const vakalar = [
-      ['{bozuk', 'geçerli bir JSON değil'],
-      [{ surum: 2, kitap: [] }, '"kitaplar" dizisi yok'],
       [{ surum: 3, kitaplar: [{ id: 'x', ad: 'A', yazar: 'B' }] }, 'dosyada 3, uygulama 2 bekliyor'],
       [{ kitaplar: [{ id: 'x', ad: 'A', yazar: 'B' }] }, '"surum" alanı yok'],
       [{ surum: 2, kitaplar: [{ id: 'x', ad: 'Adlı', yazar: '' }, { id: 'y', ad: '  ', yazar: 'Yazarlı' }] },

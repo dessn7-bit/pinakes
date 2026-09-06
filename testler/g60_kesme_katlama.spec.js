@@ -14,7 +14,8 @@
    - Mevcut TR katlaması (İ/ı, ş/s, ü/u...) DEĞİŞMEDİ.
    - iKatla'ya DOKUNULMADI (etiket sözleşmesi ayrı).
    (Mutasyon: katla'daki kesme düzleştirmesi kaldırılır → (a) vakası kırmızı.) */
-const { test, expect, tohumla, sahteKitap, bugunISO, rafAc, ayarlarAc } = require('./yardim');
+const { test, expect, tohumla, sahteKitap, bugunISO, rafAc, ayarlarAc,
+  dosyadanYukle, jsonDosya } = require('./yardim');
 const YERLESIK = require('../veri/turler-yerlesik.json');
 
 const U2019 = '’';   // ' — kütüphane kayıtlarındaki biçim (Goodreads/klavye)
@@ -29,12 +30,8 @@ test.describe('G60 kesme işareti katlaması', () => {
     page.__agAyar.turler = [{ seo: 'Roman', ad: 'Roman', kitapSayisi: 25000 }];
     await page.goto('/');
     await ayarlarAc(page);
-    await page.click('[data-act="zg-tur-ice"]');
-    await page.setInputFiles('#zgTurDosya', {
-      name: 'turler.json', mimeType: 'application/json',
-      buffer: Buffer.from(JSON.stringify({ surum: 1, tur: [
-        { ad: "Gulliver's Travels", yazar: 'Jonathan Swift', tur: 'Roman' }] }), 'utf8')
-    });
+    await dosyadanYukle(page, jsonDosya({ surum: 1, tur: [
+      { ad: "Gulliver's Travels", yazar: 'Jonathan Swift', tur: 'Roman' }] }, 'turler.json'));
     await expect(page.locator('#zgTurIceOrtu .zg-ozet')).toContainText('1');
     await expect(page.locator('#zgTurIceOrtu .zg-ozet')).toContainText('boş tür dolacak');
     await page.click('[data-act="zg-tur-uygula"]');
@@ -93,13 +90,10 @@ test.describe('G60 kesme işareti katlaması', () => {
     await tohumla(page, [sahteKitap({ ad: 'Gulliver' + U2019 + 's Travels', yazar: 'Jonathan Swift' })]);
     await rafAc(page);
     await ayarlarAc(page);
-    await page.setInputFiles('#iceDosya', {
-      name: 'yedek.json', mimeType: 'application/json',
-      buffer: Buffer.from(JSON.stringify({ surum: 2, kitaplar: [
-        { ad: "Gulliver's Travels", yazar: 'Jonathan Swift' },   // kesme varyantı → mükerrer
-        { ad: 'Yeni Gelen Kitap', yazar: 'Başka Yazar' }         // eklenmeli
-      ], hedef: {} }), 'utf8')
-    });
+    await dosyadanYukle(page, jsonDosya({ surum: 2, kitaplar: [
+      { ad: "Gulliver's Travels", yazar: 'Jonathan Swift' },   // kesme varyantı → mükerrer
+      { ad: 'Yeni Gelen Kitap', yazar: 'Başka Yazar' }         // eklenmeli
+    ], hedef: {} }, 'yedek.json'), 'birlestir');
     await expect(page.locator('#toast')).toContainText('1 kitap geri yüklendi');
     expect(await page.evaluate(() => veri.kitaplar.length)).toBe(2);
   });

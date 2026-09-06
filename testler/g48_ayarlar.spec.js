@@ -194,8 +194,12 @@ test.describe('G48 Ayarlar penceresi — Ciltli', () => {
       'CSV indir': '#ortuAyar [data-act="csv-aktar"]',
       'md sadece alıntılar': '#ortuAyar [data-act="md-alinti"]',
       'md alıntılar+notlar': '#ortuAyar [data-act="md-hepsi"]',
-      'Goodreads yükle': '#ortuAyar [data-act="gr-aktar"]',
-      'yedekten geri yükle': '#ortuAyar [data-act="ice-aktar"]',
+      /* v109: Goodreads CSV'si ve JSON yedeği ayrı düğme değil — ikisi de
+         tek "Dosyadan yükle" kapısından giriyor (işlev kaybolmadı, girişi
+         birleşti; hangi boruya gideceğini dosya söylüyor). */
+      'dosyadan yükle': '#ortuAyar [data-act="dy-sec"]',
+      'yerleşik tür listesi': '#ortuAyar [data-act="zg-tur-hazir"]',
+      'yerleşik Türkçe ad listesi': '#ortuAyar [data-act="zg-adtr-hazir"]',
       'seri tarama': '#ortuAyar [data-act="seri-ac"]',
       'kapak depo bilgisi': '#ortuAyar #kpDepoBilgi',
       'tüm fotoğrafları sil': '#ortuAyar [data-act="kp-tum-sil"]',
@@ -258,15 +262,18 @@ test.describe('G48 Ayarlar penceresi — Ciltli', () => {
     expect(adlar[0], 'iki seçenek ayrı dosya').not.toBe(adlar[1]);
   });
 
-  test('Goodreads ve geri yükleme dosya seçici açar', async ({ page }) => {
+  test('"Dosyadan yükle" tek dosya seçici açar; JSON ve CSV birlikte kabul edilir', async ({ page }) => {
     await ayarAc(page);
-    for (const [act, id] of [['gr-aktar', 'grDosya'], ['ice-aktar', 'iceDosya']]) {
-      const [secici] = await Promise.all([
-        page.waitForEvent('filechooser'),
-        page.click(`#ortuAyar [data-act="${act}"]`)
-      ]);
-      expect(await secici.element().evaluate(e => e.id), act).toBe(id);
-    }
+    const [secici] = await Promise.all([
+      page.waitForEvent('filechooser'),
+      page.click('#ortuAyar [data-act="dy-sec"]')
+    ]);
+    const g = secici.element();
+    expect(await g.evaluate(e => e.id)).toBe('dyDosya');
+    /* v109: Goodreads CSV'si de aynı kapıdan giriyor — accept ikisini de almalı */
+    const kabul = await g.evaluate(e => e.accept);
+    expect(kabul).toContain('.json');
+    expect(kabul).toContain('.csv');
   });
 
   test('seri tarama Ayarlar\'dan açılır, alttaki pencere açık kalır', async ({ page }) => {

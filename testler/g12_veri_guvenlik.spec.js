@@ -1,6 +1,6 @@
 'use strict';
 const { test, expect, tohumla, sahteKitap,
-  onaylariKabulEt, rafAc, rafYenile, ayarlarAc } = require('./yardim');
+  onaylariKabulEt, rafAc, rafYenile, ayarlarAc, dosyadanYukle, jsonDosya } = require('./yardim');
 
 /* G12 — keşif raporunun kritik veri/güvenlik maddeleri (M1-M5).
    Her vaka, düzeltme geri alındığında KIRMIZI olacak şekilde yazıldı. */
@@ -130,8 +130,7 @@ test.describe('G12 M4 — yedek geri yüklemede id çakışması', () => {
     await ayarlarAc(page);
     const yedek = JSON.stringify({ surum: 2,
       kitaplar: [{ id: 'ABC', ad: 'Eski Ad', yazar: 'Y', g: 1000 }], hedef: {} });
-    await page.setInputFiles('#iceDosya',
-      { name: 'y.json', mimeType: 'application/json', buffer: Buffer.from(yedek, 'utf8') });
+    await dosyadanYukle(page, jsonDosya(yedek, 'y.json'), 'birlestir');
     await expect(page.locator('#toast')).toContainText('1 kitap geri yüklendi');
     const idler = await page.evaluate(() => veri.kitaplar.map(k => k.id));
     expect(new Set(idler).size).toBe(idler.length); // id'ler benzersiz
@@ -148,8 +147,7 @@ test.describe('G12 M4 — yedek geri yüklemede id çakışması', () => {
     await ayarlarAc(page);
     const yedek = JSON.stringify({ surum: 2,
       kitaplar: [{ id: 'DUP', ad: 'Kitap İki', yazar: 'Yazar İki' }], hedef: {} });
-    await page.setInputFiles('#iceDosya',
-      { name: 'y.json', mimeType: 'application/json', buffer: Buffer.from(yedek, 'utf8') });
+    await dosyadanYukle(page, jsonDosya(yedek, 'y.json'), 'birlestir');
     await expect(page.locator('#toast')).toContainText('1 kitap geri yüklendi');
     const ks = await page.evaluate(() => veri.kitaplar.map(k => ({ id: k.id, ad: k.ad })));
     expect(ks.length).toBe(2);
@@ -163,8 +161,7 @@ test.describe('G12 M4 — yedek geri yüklemede id çakışması', () => {
     await ayarlarAc(page);
     const yedek = JSON.stringify({ surum: 2,
       kitaplar: [{ id: 'SAME', ad: 'Aynı Kitap', yazar: 'Aynı Yazar' }], hedef: {} });
-    await page.setInputFiles('#iceDosya',
-      { name: 'y.json', mimeType: 'application/json', buffer: Buffer.from(yedek, 'utf8') });
+    await dosyadanYukle(page, jsonDosya(yedek, 'y.json'), 'birlestir');
     await expect(page.locator('#toast')).toContainText('Yeni kitap yok');
     expect(await page.evaluate(() => veri.kitaplar.length)).toBe(1);
   });

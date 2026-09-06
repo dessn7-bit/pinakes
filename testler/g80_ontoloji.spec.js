@@ -24,7 +24,8 @@
    (Mutasyon: kaydet'ten o korumasını çıkar → (B) kırmızı; kaydetHam'dan
     undefined-korumasını çıkar → (D) kırmızı; ozetBirlesim'den o'yu çıkar →
     (H)/(I) kırmızı.) */
-const { test, expect, tohumla, sahteKitap, bugunISO, rafAc, rafaGec, ayarlarAc } = require('./yardim');
+const { test, expect, tohumla, sahteKitap, bugunISO, rafAc, rafaGec, ayarlarAc,
+  dosyadanYukle, jsonDosya } = require('./yardim');
 
 function bitmis(ek) {
   return sahteKitap(Object.assign({ durum: 'bitti', bitisTarihi: bugunISO(-30) }, ek));
@@ -285,13 +286,10 @@ test.describe('G80 ontoloji — içe aktarım (tek dosya, tek onay)', () => {
     await ozetHazir(page);
     await page.evaluate(() => window.__ozet.kaydetOnto('ontolu', 'Korunacak eski ontoloji'));
     await ayarlarAc(page);
-    await page.click('[data-act="zg-ozet-ice"]');
-    await page.setInputFiles('#zgOzetDosya', {
-      name: 'ozetler.json', mimeType: 'application/json',
-      buffer: Buffer.from(JSON.stringify({ surum: 1, ozet: [
-        { ad: 'Boş Kitap', yazar: 'Yazar A', ozet: 'Dosyadan özet.', ontoloji: 'Dosyadan ontoloji.' },
-        { ad: 'Ontolu Kitap', yazar: 'Yazar B', ozet: 'Yalnız özet gelen kayıt.' },
-        { ad: 'Salt Ontoloji', yazar: 'Yazar C', ontoloji: 'Özetsiz kayıttan ontoloji.' }] }), 'utf8') });
+    await dosyadanYukle(page, jsonDosya({ surum: 1, ozet: [
+      { ad: 'Boş Kitap', yazar: 'Yazar A', ozet: 'Dosyadan özet.', ontoloji: 'Dosyadan ontoloji.' },
+      { ad: 'Ontolu Kitap', yazar: 'Yazar B', ozet: 'Yalnız özet gelen kayıt.' },
+      { ad: 'Salt Ontoloji', yazar: 'Yazar C', ontoloji: 'Özetsiz kayıttan ontoloji.' }] }, 'ozetler.json'));
     await expect(page.locator('#zgOzetIceOrtu')).toHaveClass(/acik/);
     const ozet = page.locator('#zgOzetIceOrtu .zg-ozet');
     await expect(ozet).toContainText('2 kitapta boş özet dolacak');

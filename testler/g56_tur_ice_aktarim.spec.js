@@ -16,7 +16,7 @@
    (Mutasyon 1: taksonomi kapısı kaldırılır → taksonomi-dışı vakası kırmızı.
     Mutasyon 2: uygulamada tür dışında bir alana da yazılır → koruma vakası
     kırmızı.) */
-const { test, expect, tohumla, sahteKitap, ayarlarAc } = require('./yardim');
+const { test, expect, tohumla, sahteKitap, ayarlarAc, dosyadanYukle } = require('./yardim');
 
 const TURLER = [
   { seo: 'Tiyatro', ad: 'Tiyatro', kitapSayisi: 1200 },
@@ -30,11 +30,11 @@ function dosya(kayitlar) {
     buffer: Buffer.from(JSON.stringify({ surum: 1, tur: kayitlar }), 'utf8')
   };
 }
-/* Dosya seç → önizleme aç. ayarlarAc + düğme + gizli inputa dosya. */
+/* v109: Dosya seç → ALGILAMA KARTI → onay → önizleme. Tek giriş olduğu için
+   boruyu artık düğme değil dosyanın kök anahtarı ("tur") seçiyor. */
 async function yukle(page, kayitlar) {
   await ayarlarAc(page);
-  await page.click('[data-act="zg-tur-ice"]');
-  await page.setInputFiles('#zgTurDosya', dosya(kayitlar));
+  await dosyadanYukle(page, dosya(kayitlar));
 }
 
 test.describe('G56 tür listesi içe aktarımı', () => {
@@ -160,17 +160,20 @@ test.describe('G56 tür listesi içe aktarımı', () => {
     page.__agAyar.turler = TURLER;
     await page.goto('/');
     await ayarlarAc(page);
-    await page.click('[data-act="zg-tur-ice"]');
-    await page.setInputFiles('#zgTurDosya', {
+    /* v109: red KAPIDA — bozuk dosya boruya hiç ulaşmıyor, önizleme açılmıyor */
+    await page.click('#ortuAyar [data-act="dy-sec"]');
+    await page.setInputFiles('#dyDosya', {
       name: 'bozuk.json', mimeType: 'application/json',
       buffer: Buffer.from('{ bozuk json ---', 'utf8') });
     await expect(page.locator('#toast')).toContainText('geçerli bir JSON değil');
     await expect(page.locator('#zgTurIceOrtu')).toHaveCount(0);
-    // "tur" alanı olmayan geçerli JSON da dürüst mesaj verir
-    await page.setInputFiles('#zgTurDosya', {
+    // tanınan hiçbir liste taşımayan geçerli JSON da dürüst mesaj verir
+    await page.click('#dyKarar [data-act="dy-vazgec"]');
+    await page.click('#ortuAyar [data-act="dy-sec"]');
+    await page.setInputFiles('#dyDosya', {
       name: 'alakasiz.json', mimeType: 'application/json',
-      buffer: Buffer.from('{"kitaplar":[]}', 'utf8') });
-    await expect(page.locator('#toast')).toContainText('tür listesi yok');
+      buffer: Buffer.from('{"birsey":[1,2]}', 'utf8') });
+    await expect(page.locator('#toast')).toContainText('tanıdığım bir liste yok');
     expect(hatalar, 'çökme yok').toEqual([]);
     expect(await page.evaluate(() => veri.kitaplar[0].tur)).toBe('');
   });

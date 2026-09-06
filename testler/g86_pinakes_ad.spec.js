@@ -18,7 +18,8 @@
      kaynakta aynen durur. */
 const fs = require('fs');
 const path = require('path');
-const { test, expect, tohumla, sahteKitap, bugunISO, rafAc, ayarlarAc } = require('./yardim');
+const { test, expect, tohumla, sahteKitap, bugunISO, rafAc, ayarlarAc,
+  dosyadanYukle } = require('./yardim');
 
 function bitmis(ek) {
   return sahteKitap(Object.assign({ durum: 'bitti', bitisTarihi: bugunISO(-30) }, ek));
@@ -90,9 +91,9 @@ test.describe('G86 Pinakes — görünen ad', () => {
     // eski ADLA kaydedilmiş yedek dosyası: ad süsleme, içerik sözleşme — yüklenir
     const eski = JSON.stringify({ surum: 2, kitaplar: [
       { ad: 'Eski Yedekten Gelen', yazar: 'Eski Yazar' }], hedef: {} });
-    await page.setInputFiles('#iceDosya',
+    await dosyadanYukle(page,
       { name: 'kitaplik-yedek-2025-01-01.json', mimeType: 'application/json',
-        buffer: Buffer.from(eski, 'utf8') });
+        buffer: Buffer.from(eski, 'utf8') }, 'birlestir');
     await expect(page.locator('#toast')).toContainText('1 kitap geri yüklendi');
     expect(await page.evaluate(() => veri.kitaplar.length)).toBe(2);
   });

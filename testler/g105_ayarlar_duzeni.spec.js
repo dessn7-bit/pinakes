@@ -139,12 +139,12 @@ test.describe('G105 ayarlar düzeni', () => {
     const disa = await page.evaluate(() =>
       [...document.querySelectorAll('#ayBolumDisa [data-act]')].map(e => e.dataset.act));
     expect(disa.sort()).toEqual(['csv-aktar', 'disa-aktar', 'md-alinti', 'md-hepsi']);
-    /* İçe aktar dosya borularının hepsini taşır */
+    /* v109: yedi ayrı giriş TEK "Dosya seç" kapısında birleşti; dosya istemeyen
+       iki yerleşik liste yanında ayrı durur. Bölümde başka giriş KALMAMALI —
+       eski düğmelerden biri geri sızarsa bu iddia kırılır. */
     const ice = await page.evaluate(() =>
       [...document.querySelectorAll('#ayBolumIce [data-act]')].map(e => e.dataset.act));
-    for (const a of ['gr-aktar', 'ice-aktar', 'zg-tur-hazir', 'zg-tur-ice', 'zg-adtr-hazir',
-                     'zg-ozet-ice', 'zg-not-ice', 'ky-ice'])
-      expect(ice, 'İçe aktar: ' + a).toContain(a);
+    expect(ice.sort()).toEqual(['dy-sec', 'zg-adtr-hazir', 'zg-tur-hazir']);
     /* Katalog araçları Zenginleştir'e katıldı; yuvası KORUNDU (eklentiler oraya yazıyor) */
     await expect(page.locator('#ayBolumZengin #ayYuvaKatalog')).toHaveCount(1);
     await expect(page.locator('#ayBolumZengin [data-act="seri-ac"]')).toHaveCount(1);

@@ -14,7 +14,8 @@
      listelenir; dosya içi tekrar ve elle nota eş metin "zaten vardı".
    KAYNAK KİLİDİ (daraltılmış, kaldırılmadı): silme yalnız işaretli notlar
    üzerinde ve yalnız iceNotUygula'da serbest; işaretsiz nota dokunan her yol kırmızı. */
-const { test, expect, tohumla, sahteKitap, rafAc, ayarlarAc } = require('./yardim');
+const { test, expect, tohumla, sahteKitap, rafAc, ayarlarAc,
+  dosyadanYukle, jsonDosya } = require('./yardim');
 const fs = require('fs');
 const path = require('path');
 
@@ -43,9 +44,8 @@ const DOSYA_V2 = { surum: 1, not: [
   { ad: 'Kitap B', yazar: 'Yazar B', metin: 'Dosya notu B (düzeltildi)', tip: 'not' }
 ] };
 async function dosyaYukle(page, govde, ad) {
-  await page.click('[data-act="zg-not-ice"]');
-  await page.setInputFiles('#zgNotDosya', { name: ad || 'notlar.json', mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify(govde), 'utf8') });
+  /* v109: tek giriş — boruyu dosyanın kök anahtarı ("not") seçiyor */
+  await dosyadanYukle(page, jsonDosya(govde, ad || 'notlar.json'));
 }
 async function hazirla(page) {
   await tohumla(page, kitaplik());
@@ -217,11 +217,19 @@ test.describe('G94 not dosyası — kitap bazında yenileme (v99)', () => {
   test('ayar metni + sürüm kilidi (kaynaktan) + DARALTILMIŞ kaynak kilidi', async ({ page }) => {
     await rafAc(page);
     await ayarlarAc(page);
-    const b = page.locator('#ortuAyar');
-    await expect(b).toContainText('Not dosyası');
-    await expect(b).toContainText('Aynı dosyayı tekrar yüklersen daha önce bu yoldan gelen notlar yenisiyle değişir');
-    await expect(b).toContainText('uygulama içinde kendi yazdığın not ve alıntılar korunur');
-    await expect(b).toContainText('İçe aktarılan bir notu kalıcı olarak saklamak istersen kopyasını kendi notun olarak kaydet');
+    /* v109: not dosyasının kendi paragrafı Ayarlar'dan kalktı — yedi giriş tek
+       kapıda birleşti. Sözleşme kaybolmadı, KARAR ANINA taşındı: ne yazılacağı,
+       neye dokunulmayacağı ve neyin silineceği onay kartında duruyor. */
+    await expect(page.locator('#ortuAyar')).toContainText('not–alıntı dosyası');
+    await page.click('#ortuAyar [data-act="dy-sec"]');
+    await page.setInputFiles('#dyDosya', jsonDosya(DOSYA_V1, 'notlar.json'));
+    const kart = page.locator('#dyKarar');
+    await expect(kart).toContainText('Not dosyası');
+    await expect(kart).toContainText('SİLME içerir');
+    await expect(kart).toContainText('daha önce BU YOLDAN gelen (dosya işaretli) notları kaldırılır');
+    await expect(kart).toContainText('elle girdiğin, paylaşımdan ve Goodreads');
+    await expect(kart).toContainText('Geri alınamaz');
+    await page.click('#dyKarar [data-act="dy-vazgec"]');
     const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
     const swN = Number((sw.match(/const CACHE = ONEK \+ '-v(\d+)'/) || [])[1]);
     expect(swN).toBeGreaterThanOrEqual(99);
@@ -232,7 +240,7 @@ test.describe('G94 not dosyası — kitap bazında yenileme (v99)', () => {
     const z = fs.readFileSync(path.join(__dirname, '..', 'zengin.js'), 'utf8');
     expect(z).toContain("const ICE_NOT_KAYN = 'dosya';");
     expect(z).toContain("function iceNotIsareti(n){ return !!(n && n.kayn === ICE_NOT_KAYN); }");
-    const bas = z.indexOf('function iceNotUygula('), son = z.indexOf('function notDosyaKur(');
+    const bas = z.indexOf('function iceNotUygula('), son = z.indexOf('KÜTÜPHANE DOSYASI (v100)');
     expect(bas).toBeGreaterThan(0); expect(son).toBeGreaterThan(bas);
     const govde = z.slice(bas, son);
     expect(govde).toContain('k.notlar.push(');
