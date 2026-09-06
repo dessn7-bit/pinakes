@@ -1,0 +1,26 @@
+# ---------- SATIR SONU SÖZLEŞMESİ (v107) ----------
+# Depoda LF, çalışma kopyasında LF. İstisnasız.
+#
+# NEDEN GEREKTİ: Git kurulumu sistem düzeyinde core.autocrlf=true getiriyor
+# (C:/Program Files/Git/etc/gitconfig). Depoda saklanan içerik zaten %100
+# LF idi; autocrlf sorunu CHECKOUT tarafında yaratıyordu — git'in eline
+# geçen her dosya (checkout, stash geri alma, mutasyon denetimi sonrası
+# "git checkout -- dosya") çalışma kopyasına CRLF olarak iniyor, doğrudan
+# yazılan dosya LF kalıyordu. Aynı depoda iki sözleşme. Git bunu GÖSTERMİYOR
+# (karşılaştırırken normalize ediyor, "temiz" diyor), ama çok satırlı metin
+# düzenlemesi \n arayıp \r\n bulunca eşleşme SESSİZCE kaçıyor.
+#
+# eol=lf, core.autocrlf'i EZER. Ayar makineye bağlıydı ve yedeklenmiyordu;
+# bu dosya depoya bağlı, klonla birlikte geliyor.
+#
+# İKİNCİ KATMAN: testler/g106_satir_sonu.spec.js — çalışma kopyasında CR
+# baytı bulursa npm test kırmızı yanar. .gitattributes checkout'u kapatır,
+# test başka bir kaynaktan (editör, betik) gelecek kaçağı kapıda tutar.
+
+* text=auto eol=lf
+
+# İkili dosyalar: dokunma. (git zaten NUL baytından sezerdi, açık yazmak
+# sezgiye güvenmekten iyidir.)
+*.png        binary
+*.woff2      binary
+*.gz         binary

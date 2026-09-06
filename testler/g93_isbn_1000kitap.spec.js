@@ -395,8 +395,12 @@ temel.describe('G93 kaynak kilitleri', () => {
     const swN = Number((sw.match(/const CACHE = ONEK \+ '-v(\d+)'/) || [])[1]);
     expect(swN).toBeGreaterThanOrEqual(97);
     // repo worker == canlı deploy kopyası (kalıcı kural: ikisi birlikte düzenlenir)
+    /* v107: kıyas satır sonundan ARINDIRILMIŞ (g51'in deseni). Canlı kopya
+       depo DIŞINDA duruyor — .gitattributes oraya ulaşmaz, kopyalanırken
+       CRLF'e dönebilir. Kilit KODU sınıyor, satır sonunu değil. */
     const canli = 'C:/Users/Kaan/_kitaplik_worker/worker.js';
+    const duz = s => s.split(String.fromCharCode(13)).join('');
     if (fs.existsSync(canli))
-      expect(fs.readFileSync(canli, 'utf8')).toBe(fs.readFileSync(path.join(KOK, 'worker', 'worker.js'), 'utf8'));
+      expect(duz(fs.readFileSync(canli, 'utf8'))).toBe(duz(fs.readFileSync(path.join(KOK, 'worker', 'worker.js'), 'utf8')));
   });
 });
